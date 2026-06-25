@@ -69,6 +69,13 @@ function registerIpc(): void {
     }
   )
 
+  ipcMain.handle(
+    IPC.wordAt,
+    (_e, pageIndex: number, x: number, y: number) => pdf.wordAt(pageIndex, x, y)
+  )
+
+  ipcMain.handle(IPC.findWord, (_e, needle: string) => pdf.findWord(needle))
+
   ipcMain.handle(IPC.deletePage, (_e, index: number) => pdf.deletePage(index))
 
   ipcMain.handle(

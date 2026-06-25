@@ -8,6 +8,13 @@ interface Props {
   /** Pending (not-yet-applied) redactions for THIS page, in page points. */
   pendingRects: RedactionRect[]
   onAddRect: (rect: RedactionRect) => void
+  /** A click (not a drag) at a point — page-space pt + screen pt for menu placement. */
+  onWordClick: (
+    pagePt: { x: number; y: number },
+    clientPt: { x: number; y: number }
+  ) => void
+  /** Ctrl + wheel zoom: receives the desired new zoom (clamping done by parent). */
+  onZoomChange: (zoom: number) => void
   /** Bump to force a re-fetch of the rendered page (e.g. after redaction). */
   refreshKey: number
 }
@@ -24,9 +31,12 @@ export default function PageCanvas({
   zoom,
   pendingRects,
   onAddRect,
+  onWordClick,
+  onZoomChange,
   refreshKey
 }: Props): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const bitmapRef = useRef<ImageBitmap | null>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [drag, setDrag] = useState<DragState | null>(null)
@@ -93,6 +103,20 @@ export default function PageCanvas({
     redraw()
   }, [redraw, size, loading])
 
+  // Ctrl + wheel to zoom (non-passive so we can prevent page scroll).
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const handler = (e: WheelEvent): void => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
+      onZoomChange(zoom * factor)
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [zoom, onZoomChange])
+
   const toCanvasXY = (e: React.PointerEvent): { x: number; y: number } => {
     const rect = canvasRef.current!.getBoundingClientRect()
     return { x: e.clientX - rect.left, y: e.clientY - rect.top }
@@ -110,12 +134,12 @@ export default function PageCanvas({
     setDrag({ ...drag, x1: x, y1: y })
   }
 
-  const onPointerUp = (): void => {
+  const onPointerUp = (e: React.PointerEvent): void => {
     if (!drag) return
     const w = Math.abs(drag.x1 - drag.x0)
     const h = Math.abs(drag.y1 - drag.y0)
-    // Ignore accidental tiny drags.
     if (w > 4 && h > 4) {
+      // A real drag → manual redaction rectangle.
       onAddRect({
         pageIndex,
         x0: Math.min(drag.x0, drag.x1) / zoom,
@@ -123,12 +147,18 @@ export default function PageCanvas({
         x1: Math.max(drag.x0, drag.x1) / zoom,
         y1: Math.max(drag.y0, drag.y1) / zoom
       })
+    } else {
+      // A click → select the word under the cursor.
+      onWordClick(
+        { x: drag.x0 / zoom, y: drag.y0 / zoom },
+        { x: e.clientX, y: e.clientY }
+      )
     }
     setDrag(null)
   }
 
   return (
-    <div className="canvas-wrap">
+    <div className="canvas-wrap" ref={wrapRef}>
       {loading && <div className="canvas-loading">描画中…</div>}
       <canvas
         ref={canvasRef}
