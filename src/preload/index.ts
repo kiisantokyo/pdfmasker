@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from '../shared/types'
 import type {
+  BindingMarginOptions,
   DocumentInfo,
   RedactionRect,
   RotateDelta,
@@ -40,6 +41,8 @@ const api = {
     ipcRenderer.invoke(IPC.movePage, from, to),
   rotatePage: (index: number, delta: RotateDelta): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.rotatePage, index, delta),
+  bindingMargin: (opts: BindingMarginOptions): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.bindingMargin, opts),
   save: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.save),
   saveAs: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.saveAs),
   hasUnsavedChanges: (): Promise<boolean> =>

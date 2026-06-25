@@ -2,7 +2,11 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { IPC } from '../shared/types'
-import type { RedactionRect, RotateDelta } from '../shared/types'
+import type {
+  BindingMarginOptions,
+  RedactionRect,
+  RotateDelta
+} from '../shared/types'
 import * as pdf from './pdf-service'
 
 function createWindow(): BrowserWindow {
@@ -86,6 +90,11 @@ function registerIpc(): void {
   ipcMain.handle(
     IPC.rotatePage,
     (_e, index: number, delta: RotateDelta) => pdf.rotatePage(index, delta)
+  )
+
+  ipcMain.handle(
+    IPC.bindingMargin,
+    (_e, opts: BindingMarginOptions) => pdf.addBindingMargin(opts)
   )
 
   ipcMain.handle(IPC.hasUnsavedChanges, () => pdf.hasUnsavedChanges())
