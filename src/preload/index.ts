@@ -3,7 +3,8 @@ import { IPC } from '../shared/types'
 import type {
   DocumentInfo,
   RedactionRect,
-  RotateDelta
+  RotateDelta,
+  WordHit
 } from '../shared/types'
 
 export interface SaveResult {
@@ -29,6 +30,10 @@ const api = {
     ipcRenderer.invoke(IPC.renderPage, index, zoom),
   applyRedactions: (rects: RedactionRect[]): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.applyRedactions, rects),
+  wordAt: (pageIndex: number, x: number, y: number): Promise<WordHit | null> =>
+    ipcRenderer.invoke(IPC.wordAt, pageIndex, x, y),
+  findWord: (needle: string): Promise<RedactionRect[]> =>
+    ipcRenderer.invoke(IPC.findWord, needle),
   deletePage: (index: number): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.deletePage, index),
   movePage: (from: number, to: number): Promise<DocumentInfo> =>

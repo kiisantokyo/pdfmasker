@@ -6,7 +6,8 @@ import type {
   DocumentInfo,
   PageInfo,
   RedactionRect,
-  RotateDelta
+  RotateDelta,
+  WordHit
 } from '../shared/types'
 
 let doc: mupdf.PDFDocument | null = null
@@ -135,6 +136,59 @@ export function applyRedactions(rects: RedactionRect[]): void {
       mupdf.PDFPage.REDACT_IMAGE_REMOVE
     )
   }
+}
+
+/** Convert a mupdf Quad ([ulx,uly, urx,ury, llx,lly, lrx,lry]) to a bbox. */
+function quadToBox(q: mupdf.Quad): { x0: number; y0: number; x1: number; y1: number } {
+  const xs = [q[0], q[2], q[4], q[6]]
+  const ys = [q[1], q[3], q[5], q[7]]
+  return {
+    x0: Math.min(...xs),
+    y0: Math.min(...ys),
+    x1: Math.max(...xs),
+    y1: Math.max(...ys)
+  }
+}
+
+/** Find the word at a point (page-space points). Returns null if none. */
+export function wordAt(pageIndex: number, x: number, y: number): WordHit | null {
+  const d = requireDoc()
+  const page = d.loadPage(pageIndex)
+  const stext = page.toStructuredText()
+  const pt: mupdf.Point = [x, y]
+  const quad = stext.snap(pt, pt, 'words')
+  const box = quadToBox(quad)
+  // Degenerate quad => no word under the cursor.
+  if (box.x1 - box.x0 < 0.5 || box.y1 - box.y0 < 0.5) return null
+  // copy() selects in reading order, so a ul->lr selection grabs the whole
+  // line. Sweep horizontally through the word's mid-line to get just the word.
+  const cy = (box.y0 + box.y1) / 2
+  const word = stext
+    .copy([box.x0 + 0.5, cy], [box.x1 - 0.5, cy])
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!word) return null
+  return { word, rect: { pageIndex, ...box } }
+}
+
+/** Find every occurrence of `needle` across all pages (case-insensitive). */
+export function findWord(needle: string): RedactionRect[] {
+  const d = requireDoc()
+  const trimmed = needle.trim()
+  if (!trimmed) return []
+  const rects: RedactionRect[] = []
+  const count = d.countPages()
+  for (let i = 0; i < count; i++) {
+    const page = d.loadPage(i)
+    const matches = page.search(trimmed, 500)
+    for (const match of matches) {
+      // Each match is one or more quads (one per visual line); redact each.
+      for (const quad of match) {
+        rects.push({ pageIndex: i, ...quadToBox(quad) })
+      }
+    }
+  }
+  return rects
 }
 
 export function deletePage(index: number): DocumentInfo {

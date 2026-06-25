@@ -44,12 +44,20 @@ export interface RenderedPage {
 /** Rotate a page by this many degrees (clockwise). */
 export type RotateDelta = 90 | 180 | 270 | -90
 
+/** A word found at a click point, with its bounding box as a redaction rect. */
+export interface WordHit {
+  word: string
+  rect: RedactionRect
+}
+
 export const IPC = {
   open: 'pdf:open',
   openFromPath: 'pdf:openFromPath',
   info: 'pdf:info',
   renderPage: 'pdf:renderPage',
   applyRedactions: 'pdf:applyRedactions',
+  wordAt: 'pdf:wordAt',
+  findWord: 'pdf:findWord',
   deletePage: 'pdf:deletePage',
   movePage: 'pdf:movePage',
   rotatePage: 'pdf:rotatePage',

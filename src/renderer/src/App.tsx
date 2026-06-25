@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { DocumentInfo, RedactionRect } from '@shared/types'
+import type { DocumentInfo, RedactionRect, WordHit } from '@shared/types'
 import { pdfApi } from './lib/api'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
@@ -15,6 +15,14 @@ export default function App(): React.JSX.Element {
   const [refreshKey, setRefreshKey] = useState(0)
   const [status, setStatus] = useState('PDFを開いて始めましょう。')
   const [dragging, setDragging] = useState(false)
+  const [wordMenu, setWordMenu] = useState<
+    (WordHit & { x: number; y: number }) | null
+  >(null)
+
+  const clampZoom = useCallback(
+    (z: number) => setZoom(Math.min(3, Math.max(0.5, Math.round(z * 100) / 100))),
+    []
+  )
 
   const pendingForPage = useMemo(
     () => pending.filter((r) => r.pageIndex === currentPage),
@@ -138,6 +146,37 @@ export default function App(): React.JSX.Element {
       }
     }, '名前を付けて保存')
 
+  const onWordClick = (
+    pagePt: { x: number; y: number },
+    clientPt: { x: number; y: number }
+  ): Promise<void> =>
+    run(async () => {
+      const hit = await pdfApi.wordAt(currentPage, pagePt.x, pagePt.y)
+      if (!hit) {
+        setWordMenu(null)
+        setStatus('単語が見つかりませんでした（画像化されたPDFかもしれません）。')
+        return
+      }
+      setWordMenu({ ...hit, x: clientPt.x, y: clientPt.y })
+    }, '単語の選択')
+
+  const redactWordOnce = (): void => {
+    if (!wordMenu) return
+    setPending((p) => [...p, wordMenu.rect])
+    setStatus(`「${wordMenu.word}」を1箇所マークしました。`)
+    setWordMenu(null)
+  }
+
+  const redactWordAll = (): Promise<void> =>
+    run(async () => {
+      if (!wordMenu) return
+      const { word } = wordMenu
+      const rects = await pdfApi.findWord(word)
+      setPending((p) => [...p, ...rects])
+      setStatus(`「${word}」を文書内 ${rects.length} 箇所マークしました。`)
+      setWordMenu(null)
+    }, '単語の一括選択')
+
   const onDragOver = (e: React.DragEvent): void => {
     if (Array.from(e.dataTransfer.types).includes('Files')) {
       e.preventDefault()
@@ -183,6 +222,26 @@ export default function App(): React.JSX.Element {
           </div>
         </div>
       )}
+
+      {wordMenu && (
+        <>
+          <div className="menu-backdrop" onClick={() => setWordMenu(null)} />
+          <div
+            className="word-menu"
+            style={{ left: wordMenu.x, top: wordMenu.y }}
+          >
+            <div className="word-menu-head">
+              選択した語：<b>{wordMenu.word}</b>
+            </div>
+            <button onClick={redactWordOnce}>この語のみ墨消し</button>
+            <button onClick={redactWordAll}>文書内の同じ語をすべて墨消し</button>
+            <button className="word-menu-cancel" onClick={() => setWordMenu(null)}>
+              キャンセル
+            </button>
+          </div>
+        </>
+      )}
+
       <Toolbar
         hasDoc={!!doc}
         pendingCount={pending.length}
@@ -219,6 +278,8 @@ export default function App(): React.JSX.Element {
               pendingRects={pendingForPage}
               refreshKey={refreshKey}
               onAddRect={(r) => setPending((p) => [...p, r])}
+              onWordClick={onWordClick}
+              onZoomChange={clampZoom}
             />
           ) : (
             <div className="empty">
