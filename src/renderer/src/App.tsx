@@ -1,5 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { DocumentInfo, RedactionRect, WordHit } from '@shared/types'
+import type {
+  BindingSide,
+  DocumentInfo,
+  RedactionRect,
+  WordHit
+} from '@shared/types'
 import { pdfApi } from './lib/api'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
@@ -18,6 +23,10 @@ export default function App(): React.JSX.Element {
   const [wordMenu, setWordMenu] = useState<
     (WordHit & { x: number; y: number }) | null
   >(null)
+  const [bindingOpen, setBindingOpen] = useState(false)
+  const [bindSide, setBindSide] = useState<BindingSide>('left')
+  const [bindMm, setBindMm] = useState(20)
+  const [bindAll, setBindAll] = useState(true)
 
   const clampZoom = useCallback(
     (z: number) => setZoom(Math.min(3, Math.max(0.5, Math.round(z * 100) / 100))),
@@ -96,6 +105,26 @@ export default function App(): React.JSX.Element {
       setRefreshKey((k) => k + 1)
       setStatus(`ページ ${currentPage + 1} を回転しました。`)
     }, '回転')
+
+  const applyBinding = (): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      const info = await pdfApi.bindingMargin({
+        side: bindSide,
+        marginMm: bindMm,
+        allPages: bindAll,
+        pageIndex: currentPage
+      })
+      setDoc(info)
+      setPending([])
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setBindingOpen(false)
+      const sideJa = { left: '左', right: '右', top: '上', bottom: '下' }[bindSide]
+      setStatus(
+        `閉じ代（${sideJa}・${bindMm}mm）を${bindAll ? '全' : '現在の'}ページに適用しました。`
+      )
+    }, '閉じ代の適用')
 
   const deletePage = (): Promise<void> =>
     run(async () => {
@@ -242,6 +271,82 @@ export default function App(): React.JSX.Element {
         </>
       )}
 
+      {bindingOpen && (
+        <div className="modal-backdrop" onClick={() => setBindingOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>閉じ代を確保</h2>
+            <p className="modal-desc">
+              ページサイズはそのままで、中身を縮小して指定した側に余白を作ります。
+            </p>
+
+            <div className="field">
+              <span className="field-label">綴じる側</span>
+              <div className="side-grid">
+                {(
+                  [
+                    ['left', '左'],
+                    ['right', '右'],
+                    ['top', '上'],
+                    ['bottom', '下']
+                  ] as [BindingSide, string][]
+                ).map(([s, label]) => (
+                  <button
+                    key={s}
+                    className={'side-btn' + (bindSide === s ? ' active' : '')}
+                    onClick={() => setBindSide(s)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="field">
+              <span className="field-label">余白の幅</span>
+              <div className="mm-row">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={bindMm}
+                  onChange={(e) => setBindMm(Number(e.target.value))}
+                />
+                <span>mm</span>
+              </div>
+            </div>
+
+            <div className="field">
+              <span className="field-label">対象</span>
+              <label className="radio">
+                <input
+                  type="radio"
+                  checked={bindAll}
+                  onChange={() => setBindAll(true)}
+                />
+                全ページ
+              </label>
+              <label className="radio">
+                <input
+                  type="radio"
+                  checked={!bindAll}
+                  onChange={() => setBindAll(false)}
+                />
+                現在のページのみ
+              </label>
+            </div>
+
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setBindingOpen(false)}>
+                キャンセル
+              </button>
+              <button className="modal-primary" onClick={applyBinding} disabled={busy}>
+                適用
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toolbar
         hasDoc={!!doc}
         pendingCount={pending.length}
@@ -252,6 +357,7 @@ export default function App(): React.JSX.Element {
         onApplyRedactions={applyRedactions}
         onClearPending={() => setPending([])}
         onRotate={rotate}
+        onBindingMargin={() => setBindingOpen(true)}
         onDeletePage={deletePage}
         onMoveUp={() => move(-1)}
         onMoveDown={() => move(1)}

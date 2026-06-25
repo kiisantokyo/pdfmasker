@@ -3,6 +3,7 @@
 
 import * as mupdf from 'mupdf'
 import type {
+  BindingMarginOptions,
   DocumentInfo,
   PageInfo,
   RedactionRect,
@@ -221,6 +222,96 @@ export function rotatePage(index: number, delta: RotateDelta): DocumentInfo {
   const current = readRotation(page)
   const next = (((current + delta) % 360) + 360) % 360
   obj.put('Rotate', next)
+  return getInfo()
+}
+
+const MM_TO_PT = 72 / 25.4
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((n, p) => n + p.length, 0)
+  const out = new Uint8Array(total)
+  let off = 0
+  for (const p of parts) {
+    out.set(p, off)
+    off += p.length
+  }
+  return out
+}
+
+function readPageContents(pageObj: mupdf.PDFObject): Uint8Array {
+  const c = pageObj.get('Contents')
+  if (c.isStream()) return Uint8Array.from(c.readStream().asUint8Array())
+  if (c.isArray()) {
+    const parts: Uint8Array[] = []
+    const len = c.length
+    for (let i = 0; i < len; i++) {
+      parts.push(Uint8Array.from(c.get(i).readStream().asUint8Array()))
+      parts.push(new TextEncoder().encode('\n'))
+    }
+    return concatBytes(parts)
+  }
+  return new Uint8Array()
+}
+
+function mediaBox(page: mupdf.PDFPage): [number, number, number, number] {
+  const mb = page.getObject().getInheritable('MediaBox')
+  if (mb && mb.isArray() && mb.length === 4) {
+    return [
+      mb.get(0).asNumber(),
+      mb.get(1).asNumber(),
+      mb.get(2).asNumber(),
+      mb.get(3).asNumber()
+    ]
+  }
+  const [x0, y0, x1, y1] = page.getBounds()
+  return [x0, y0, x1, y1]
+}
+
+/**
+ * Shrink page content and add a blank binding (staple) margin on one edge.
+ * Page size is preserved; the content is uniformly scaled and shifted so the
+ * binding edge gets `marginMm` of empty space.
+ */
+export function addBindingMargin(opts: BindingMarginOptions): DocumentInfo {
+  const d = requireDoc()
+  const m = Math.max(0, opts.marginMm) * MM_TO_PT
+  const targets = opts.allPages
+    ? Array.from({ length: d.countPages() }, (_, i) => i)
+    : [opts.pageIndex]
+
+  for (const i of targets) {
+    const page = d.loadPage(i)
+    const [llx, lly, urx, ury] = mediaBox(page)
+    const W = urx - llx
+    const H = ury - lly
+    if (W <= 0 || H <= 0) continue
+
+    const horizontal = opts.side === 'left' || opts.side === 'right'
+    const s = horizontal ? (W - m) / W : (H - m) / H
+    if (s <= 0 || s >= 1) continue
+
+    let tx = llx * (1 - s)
+    let ty = lly * (1 - s)
+    if (horizontal) {
+      // Centre vertically; push away from the binding edge horizontally.
+      ty += (H - H * s) / 2
+      tx += opts.side === 'left' ? m : 0
+    } else {
+      // Centre horizontally; push away from the binding edge vertically.
+      tx += (W - W * s) / 2
+      ty += opts.side === 'bottom' ? m : 0
+    }
+
+    const enc = new TextEncoder()
+    const prefix = enc.encode(`q ${s} 0 0 ${s} ${tx} ${ty} cm\n`)
+    const suffix = enc.encode('\nQ\n')
+    const original = readPageContents(page.getObject())
+    const wrapped = concatBytes([prefix, original, suffix])
+
+    const stream = d.addStream(wrapped, {})
+    page.getObject().put('Contents', stream)
+  }
+
   return getInfo()
 }
 

@@ -50,6 +50,19 @@ export interface WordHit {
   rect: RedactionRect
 }
 
+/** Which edge the binding (staple) margin is added to. */
+export type BindingSide = 'left' | 'right' | 'top' | 'bottom'
+
+export interface BindingMarginOptions {
+  side: BindingSide
+  /** Margin width in millimetres. */
+  marginMm: number
+  /** Apply to every page (true) or only the current page (false). */
+  allPages: boolean
+  /** Current page index, used when allPages is false. */
+  pageIndex: number
+}
+
 export const IPC = {
   open: 'pdf:open',
   openFromPath: 'pdf:openFromPath',
@@ -61,6 +74,7 @@ export const IPC = {
   deletePage: 'pdf:deletePage',
   movePage: 'pdf:movePage',
   rotatePage: 'pdf:rotatePage',
+  bindingMargin: 'pdf:bindingMargin',
   save: 'pdf:save',
   saveAs: 'pdf:saveAs',
   hasUnsavedChanges: 'pdf:hasUnsavedChanges'

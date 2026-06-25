@@ -295,6 +295,118 @@ body {
   font-size: 12px !important;
 }
 
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(50, 40, 80, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(60, 45, 110, 0.4);
+  padding: 22px 24px;
+  width: 360px;
+  max-width: 92vw;
+}
+.modal h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+.modal-desc {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.field {
+  margin-bottom: 16px;
+}
+.field-label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.side-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.side-btn {
+  padding: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+}
+.side-btn:hover {
+  border-color: var(--accent);
+}
+.side-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.mm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mm-row input {
+  width: 90px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 14px;
+}
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.radio input {
+  accent-color: var(--accent);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+.modal-actions button {
+  padding: 9px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid var(--border);
+}
+.modal-cancel {
+  background: var(--panel);
+  color: var(--muted);
+}
+.modal-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.modal-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Status bar */
 .statusbar {
   display: flex;

@@ -8,6 +8,7 @@ interface Props {
   onApplyRedactions: () => void
   onClearPending: () => void
   onRotate: () => void
+  onBindingMargin: () => void
   onDeletePage: () => void
   onMoveUp: () => void
   onMoveDown: () => void
@@ -52,6 +53,16 @@ export default function Toolbar(props: Props): React.JSX.Element {
       </button>
       <button className="danger" onClick={props.onDeletePage} disabled={d}>
         ページ削除
+      </button>
+
+      <span className="sep" />
+
+      <button
+        onClick={props.onBindingMargin}
+        disabled={d}
+        title="ホチキスなどの閉じ代を確保するため、中身を縮小して余白を作ります"
+      >
+        閉じ代
       </button>
 
       <span className="sep" />
