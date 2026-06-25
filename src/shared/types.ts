@@ -50,6 +50,14 @@ export interface WordHit {
   rect: RedactionRect
 }
 
+/** A candidate term and how many times it occurs in the document. */
+export interface TermCount {
+  term: string
+  count: number
+  /** Heuristic category label (e.g. メール, 電話, カタカナ語). */
+  kind?: string
+}
+
 /** Which edge the binding (staple) margin is added to. */
 export type BindingSide = 'left' | 'right' | 'top' | 'bottom'
 
@@ -71,6 +79,9 @@ export const IPC = {
   applyRedactions: 'pdf:applyRedactions',
   wordAt: 'pdf:wordAt',
   findWord: 'pdf:findWord',
+  extractCandidates: 'pdf:extractCandidates',
+  countTerms: 'pdf:countTerms',
+  findTerms: 'pdf:findTerms',
   deletePage: 'pdf:deletePage',
   movePage: 'pdf:movePage',
   rotatePage: 'pdf:rotatePage',

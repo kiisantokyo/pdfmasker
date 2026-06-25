@@ -80,6 +80,12 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.findWord, (_e, needle: string) => pdf.findWord(needle))
 
+  ipcMain.handle(IPC.extractCandidates, () => pdf.extractCandidates())
+
+  ipcMain.handle(IPC.countTerms, (_e, terms: string[]) => pdf.countTerms(terms))
+
+  ipcMain.handle(IPC.findTerms, (_e, terms: string[]) => pdf.findTerms(terms))
+
   ipcMain.handle(IPC.deletePage, (_e, index: number) => pdf.deletePage(index))
 
   ipcMain.handle(
