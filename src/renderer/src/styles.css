@@ -181,6 +181,9 @@ body {
   cursor: crosshair;
   display: block;
 }
+.page-canvas.mode-text {
+  cursor: text;
+}
 .canvas-loading {
   position: absolute;
   top: 8px;

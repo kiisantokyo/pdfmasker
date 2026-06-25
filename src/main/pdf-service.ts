@@ -173,6 +173,23 @@ export function wordAt(pageIndex: number, x: number, y: number): WordHit | null 
   return { word, rect: { pageIndex, ...box } }
 }
 
+/**
+ * Text-selection sweep: returns the quads tracing the text between two points
+ * (page-space), so the user can "drag over" words instead of boxing them.
+ */
+export function selectText(
+  pageIndex: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number
+): RedactionRect[] {
+  const d = requireDoc()
+  const stext = d.loadPage(pageIndex).toStructuredText()
+  const quads = stext.highlight([x0, y0], [x1, y1], 500)
+  return quads.map((q) => ({ pageIndex, ...quadToBox(q) }))
+}
+
 /** Find every occurrence of `needle` across all pages (case-insensitive). */
 export function findWord(needle: string): RedactionRect[] {
   const d = requireDoc()

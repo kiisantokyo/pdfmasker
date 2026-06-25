@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RedactionRect } from '@shared/types'
+import type { RedactionRect, SelectMode } from '@shared/types'
 import { pdfApi } from '../lib/api'
 
 interface Props {
@@ -7,7 +7,9 @@ interface Props {
   zoom: number
   /** Pending (not-yet-applied) redactions for THIS page, in page points. */
   pendingRects: RedactionRect[]
-  onAddRect: (rect: RedactionRect) => void
+  /** 'text' = drag over words (snap to text); 'rect' = freehand rectangle. */
+  selectMode: SelectMode
+  onAddRects: (rects: RedactionRect[]) => void
   /** A click (not a drag) at a point — page-space pt + screen pt for menu placement. */
   onWordClick: (
     pagePt: { x: number; y: number },
@@ -30,7 +32,8 @@ export default function PageCanvas({
   pageIndex,
   zoom,
   pendingRects,
-  onAddRect,
+  selectMode,
+  onAddRects,
   onWordClick,
   onZoomChange,
   refreshKey
@@ -38,8 +41,11 @@ export default function PageCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const bitmapRef = useRef<ImageBitmap | null>(null)
+  const lastQuery = useRef(0)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [drag, setDrag] = useState<DragState | null>(null)
+  // Live preview of the text selection (page-space rects) while dragging.
+  const [textPreview, setTextPreview] = useState<RedactionRect[]>([])
   const [loading, setLoading] = useState(true)
 
   // Fetch + decode the page render whenever page/zoom/refresh changes.
@@ -65,7 +71,19 @@ export default function PageCanvas({
     }
   }, [pageIndex, zoom, refreshKey])
 
-  // Redraw: page image + committed pending rects + in-progress drag rect.
+  const fillRectPt = useCallback(
+    (ctx: CanvasRenderingContext2D, r: RedactionRect) => {
+      const x = Math.min(r.x0, r.x1) * zoom
+      const y = Math.min(r.y0, r.y1) * zoom
+      const w = Math.abs(r.x1 - r.x0) * zoom
+      const h = Math.abs(r.y1 - r.y0) * zoom
+      ctx.fillRect(x, y, w, h)
+      ctx.strokeRect(x, y, w, h)
+    },
+    [zoom]
+  )
+
+  // Redraw: page image + committed pending rects + live selection.
   const redraw = useCallback(() => {
     const canvas = canvasRef.current
     const bmp = bitmapRef.current
@@ -78,16 +96,13 @@ export default function PageCanvas({
     ctx.fillStyle = 'rgba(220, 38, 38, 0.45)'
     ctx.strokeStyle = 'rgba(220, 38, 38, 0.95)'
     ctx.lineWidth = 1
-    for (const r of pendingRects) {
-      const x = Math.min(r.x0, r.x1) * zoom
-      const y = Math.min(r.y0, r.y1) * zoom
-      const w = Math.abs(r.x1 - r.x0) * zoom
-      const h = Math.abs(r.y1 - r.y0) * zoom
-      ctx.fillRect(x, y, w, h)
-      ctx.strokeRect(x, y, w, h)
-    }
+    for (const r of pendingRects) fillRectPt(ctx, r)
 
-    if (drag) {
+    // Live text selection preview (red, matches committed look).
+    for (const r of textPreview) fillRectPt(ctx, r)
+
+    // Freehand rectangle preview (rect mode only) — blue.
+    if (drag && selectMode === 'rect') {
       const x = Math.min(drag.x0, drag.x1)
       const y = Math.min(drag.y0, drag.y1)
       const w = Math.abs(drag.x1 - drag.x0)
@@ -97,7 +112,7 @@ export default function PageCanvas({
       ctx.fillRect(x, y, w, h)
       ctx.strokeRect(x, y, w, h)
     }
-  }, [pendingRects, drag, zoom])
+  }, [pendingRects, textPreview, drag, selectMode, fillRectPt])
 
   useEffect(() => {
     redraw()
@@ -126,35 +141,60 @@ export default function PageCanvas({
     const { x, y } = toCanvasXY(e)
     canvasRef.current?.setPointerCapture(e.pointerId)
     setDrag({ x0: x, y0: y, x1: x, y1: y })
+    setTextPreview([])
   }
 
   const onPointerMove = (e: React.PointerEvent): void => {
     if (!drag) return
     const { x, y } = toCanvasXY(e)
     setDrag({ ...drag, x1: x, y1: y })
+
+    if (selectMode === 'text') {
+      const moved = Math.hypot(x - drag.x0, y - drag.y0)
+      const now = performance.now()
+      if (moved > 4 && now - lastQuery.current > 40) {
+        lastQuery.current = now
+        pdfApi
+          .selectText(pageIndex, drag.x0 / zoom, drag.y0 / zoom, x / zoom, y / zoom)
+          .then(setTextPreview)
+      }
+    }
   }
 
-  const onPointerUp = (e: React.PointerEvent): void => {
+  const onPointerUp = async (e: React.PointerEvent): Promise<void> => {
     if (!drag) return
-    const w = Math.abs(drag.x1 - drag.x0)
-    const h = Math.abs(drag.y1 - drag.y0)
-    if (w > 4 && h > 4) {
-      // A real drag → manual redaction rectangle.
-      onAddRect({
-        pageIndex,
-        x0: Math.min(drag.x0, drag.x1) / zoom,
-        y0: Math.min(drag.y0, drag.y1) / zoom,
-        x1: Math.max(drag.x0, drag.x1) / zoom,
-        y1: Math.max(drag.y0, drag.y1) / zoom
-      })
-    } else {
-      // A click → select the word under the cursor.
+    const dx = Math.abs(drag.x1 - drag.x0)
+    const dy = Math.abs(drag.y1 - drag.y0)
+    const isClick = dx <= 4 && dy <= 4
+
+    if (isClick) {
       onWordClick(
         { x: drag.x0 / zoom, y: drag.y0 / zoom },
         { x: e.clientX, y: e.clientY }
       )
+    } else if (selectMode === 'text') {
+      // Authoritative final selection.
+      const rects = await pdfApi.selectText(
+        pageIndex,
+        drag.x0 / zoom,
+        drag.y0 / zoom,
+        drag.x1 / zoom,
+        drag.y1 / zoom
+      )
+      if (rects.length) onAddRects(rects)
+    } else {
+      onAddRects([
+        {
+          pageIndex,
+          x0: Math.min(drag.x0, drag.x1) / zoom,
+          y0: Math.min(drag.y0, drag.y1) / zoom,
+          x1: Math.max(drag.x0, drag.x1) / zoom,
+          y1: Math.max(drag.y0, drag.y1) / zoom
+        }
+      ])
     }
     setDrag(null)
+    setTextPreview([])
   }
 
   return (
@@ -164,7 +204,7 @@ export default function PageCanvas({
         ref={canvasRef}
         width={size.w}
         height={size.h}
-        className="page-canvas"
+        className={'page-canvas' + (selectMode === 'text' ? ' mode-text' : '')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

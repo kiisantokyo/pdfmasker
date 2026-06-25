@@ -9,6 +9,10 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
   （Electron非依存・純mupdf）。IPCは `src/main/index.ts`、橋渡しは `src/preload/index.ts`、
   チャンネル名と型は `src/shared/types.ts`。
 - 単語クリック: `wordAt`（snap("words")＋中央ライン水平スイープでテキスト取得）/ `findWord`（page.search）。
+- なぞって選択: `selectText`（StructuredText.highlight でテキスト選択quad）。選択モードは
+  `SelectMode='text'|'rect'`（既定 text）。ドラッグ中はIPCをthrottle(40ms)してライブプレビュー。
+- ページ一覧の表示: pt寸法は分かりにくいので `PageSidebar` の `sizeLabel` で A4縦 等の用紙名に変換
+  （許容±4mm、未一致は mm 表記）。
 - 固有名詞・指示: `extractCandidates`（オフライン正規表現ヒューリスティック）/ `countTerms` / `findTerms`。
   UIは `components/RedactByTermsModal.tsx`。Markdown解析は同ファイル内 `parseMarkdown`。
   **方針: アプリは外部送信しない。** 高精度が要るときはユーザーが外部AIで作った指示(Markdown)を貼り付ける。
