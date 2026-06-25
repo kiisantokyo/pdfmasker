@@ -4,6 +4,17 @@
 Desktop PDF **true-redaction** + page-editing app. UI is in Japanese.
 Unrelated to other projects in this workspace (e.g. Mints Party Manager).
 
+## Feature map (where things live)
+- 真の墨消し / 単語クリック / 検索 / 候補抽出 / 閉じ代: すべて `src/main/pdf-service.ts`
+  （Electron非依存・純mupdf）。IPCは `src/main/index.ts`、橋渡しは `src/preload/index.ts`、
+  チャンネル名と型は `src/shared/types.ts`。
+- 単語クリック: `wordAt`（snap("words")＋中央ライン水平スイープでテキスト取得）/ `findWord`（page.search）。
+- 固有名詞・指示: `extractCandidates`（オフライン正規表現ヒューリスティック）/ `countTerms` / `findTerms`。
+  UIは `components/RedactByTermsModal.tsx`。Markdown解析は同ファイル内 `parseMarkdown`。
+  **方針: アプリは外部送信しない。** 高精度が要るときはユーザーが外部AIで作った指示(Markdown)を貼り付ける。
+- 閉じ代: `addBindingMargin`（コンテンツストリームを `q s 0 0 s tx ty cm ... Q` で包んで均等縮小・シフト）。
+- Ctrl+ホイールズーム: `components/PageCanvas.tsx`（passive:false の wheel リスナ）。
+
 ## Drag & drop
 - Opening a PDF works via the 開く button **and** by dropping a file on the
   window. Electron 42 removed `File.path`, so the dropped path is resolved with

@@ -5,6 +5,7 @@ import type {
   DocumentInfo,
   RedactionRect,
   RotateDelta,
+  TermCount,
   WordHit
 } from '../shared/types'
 
@@ -35,6 +36,12 @@ const api = {
     ipcRenderer.invoke(IPC.wordAt, pageIndex, x, y),
   findWord: (needle: string): Promise<RedactionRect[]> =>
     ipcRenderer.invoke(IPC.findWord, needle),
+  extractCandidates: (): Promise<TermCount[]> =>
+    ipcRenderer.invoke(IPC.extractCandidates),
+  countTerms: (terms: string[]): Promise<TermCount[]> =>
+    ipcRenderer.invoke(IPC.countTerms, terms),
+  findTerms: (terms: string[]): Promise<RedactionRect[]> =>
+    ipcRenderer.invoke(IPC.findTerms, terms),
   deletePage: (index: number): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.deletePage, index),
   movePage: (from: number, to: number): Promise<DocumentInfo> =>

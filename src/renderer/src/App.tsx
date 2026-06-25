@@ -9,6 +9,7 @@ import { pdfApi } from './lib/api'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
 import PageCanvas from './components/PageCanvas'
+import RedactByTermsModal from './components/RedactByTermsModal'
 
 export default function App(): React.JSX.Element {
   const [doc, setDoc] = useState<DocumentInfo | null>(null)
@@ -23,6 +24,7 @@ export default function App(): React.JSX.Element {
   const [wordMenu, setWordMenu] = useState<
     (WordHit & { x: number; y: number }) | null
   >(null)
+  const [termsOpen, setTermsOpen] = useState(false)
   const [bindingOpen, setBindingOpen] = useState(false)
   const [bindSide, setBindSide] = useState<BindingSide>('left')
   const [bindMm, setBindMm] = useState(20)
@@ -271,6 +273,16 @@ export default function App(): React.JSX.Element {
         </>
       )}
 
+      {termsOpen && (
+        <RedactByTermsModal
+          onClose={() => setTermsOpen(false)}
+          onAddRects={(rects, summary) => {
+            setPending((p) => [...p, ...rects])
+            setStatus(summary)
+          }}
+        />
+      )}
+
       {bindingOpen && (
         <div className="modal-backdrop" onClick={() => setBindingOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -356,6 +368,7 @@ export default function App(): React.JSX.Element {
         onOpen={open}
         onApplyRedactions={applyRedactions}
         onClearPending={() => setPending([])}
+        onRedactByTerms={() => setTermsOpen(true)}
         onRotate={rotate}
         onBindingMargin={() => setBindingOpen(true)}
         onDeletePage={deletePage}

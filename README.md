@@ -11,9 +11,12 @@ each marked region.
 ## Features
 
 - 🖍️ **True redaction** — drag to mark areas; underlying text/images are removed, not just covered.
+- 🖱️ **Click a word to redact** — choose "this word only" or "every occurrence in the document".
+- 🧾 **Entity / instruction redaction** — auto-extract likely proper nouns & PII (offline heuristics), or paste markdown instructions from an external AI (ChatGPT/Gemini) and redact the listed terms. The app itself never sends data anywhere.
+- 📐 **Binding margin** — shrink page content to leave a staple/binding margin on any edge.
 - 📂 **Open via button or drag & drop** — drop a PDF anywhere on the window.
 - 📄 **Page editing** — delete, reorder (move ◀/▶), and rotate pages.
-- 🔍 Zoomable page viewer with per-page pending-redaction badges.
+- 🔍 Zoomable page viewer (Ctrl + wheel) with per-page pending-redaction badges.
 - 💾 Save in place or Save As.
 - 🔒 Fully offline — PDFs never leave your machine.
 
@@ -67,6 +70,10 @@ pnpm package      # build a distributable (electron-builder)
 
 ## Status
 
-MVP. Implemented: open, render, true redaction, delete/move/rotate page,
-save / save as. Not yet: multi-rect undo, text/stamp annotations, OCR,
-password-protected PDFs.
+Implemented: open (button + drag&drop), render, Ctrl+wheel zoom, true redaction,
+click-word redaction (single / all occurrences), offline entity extraction +
+markdown-instruction import, binding margin, delete/move/rotate page, save / save as.
+
+Not yet: undo/redo, manual rect deletion, text/stamp annotations, OCR for
+scanned PDFs, password-protected PDFs, higher-accuracy proper-noun detection
+(e.g. a bundled morphological analyzer like kuromoji).

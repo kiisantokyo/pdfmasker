@@ -7,6 +7,7 @@ interface Props {
   onOpen: () => void
   onApplyRedactions: () => void
   onClearPending: () => void
+  onRedactByTerms: () => void
   onRotate: () => void
   onBindingMargin: () => void
   onDeletePage: () => void
@@ -38,6 +39,13 @@ export default function Toolbar(props: Props): React.JSX.Element {
       </button>
       <button onClick={props.onClearPending} disabled={d || pendingCount === 0}>
         マークを消去
+      </button>
+      <button
+        onClick={props.onRedactByTerms}
+        disabled={d}
+        title="固有名詞の自動抽出、または外部AIの指示（Markdown）から墨消し対象を選びます"
+      >
+        固有名詞/指示…
       </button>
 
       <span className="sep" />
