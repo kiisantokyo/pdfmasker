@@ -3,6 +3,7 @@ import type {
   BindingSide,
   DocumentInfo,
   RedactionRect,
+  SelectMode,
   WordHit
 } from '@shared/types'
 import { pdfApi } from './lib/api'
@@ -21,6 +22,7 @@ export default function App(): React.JSX.Element {
   const [refreshKey, setRefreshKey] = useState(0)
   const [status, setStatus] = useState('PDFを開いて始めましょう。')
   const [dragging, setDragging] = useState(false)
+  const [selectMode, setSelectMode] = useState<SelectMode>('text')
   const [wordMenu, setWordMenu] = useState<
     (WordHit & { x: number; y: number }) | null
   >(null)
@@ -365,6 +367,10 @@ export default function App(): React.JSX.Element {
         zoom={zoom}
         busy={busy}
         dirty={dirty}
+        selectMode={selectMode}
+        onToggleSelectMode={() =>
+          setSelectMode((m) => (m === 'text' ? 'rect' : 'text'))
+        }
         onOpen={open}
         onApplyRedactions={applyRedactions}
         onClearPending={() => setPending([])}
@@ -395,8 +401,9 @@ export default function App(): React.JSX.Element {
               pageIndex={currentPage}
               zoom={zoom}
               pendingRects={pendingForPage}
+              selectMode={selectMode}
               refreshKey={refreshKey}
-              onAddRect={(r) => setPending((p) => [...p, r])}
+              onAddRects={(rs) => setPending((p) => [...p, ...rs])}
               onWordClick={onWordClick}
               onZoomChange={clampZoom}
             />
@@ -404,8 +411,8 @@ export default function App(): React.JSX.Element {
             <div className="empty">
               <h1>究極の墨消し</h1>
               <p>
-                PDFを開き、ドラッグで領域をマークして<b>「墨消しを適用」</b>すると、
-                下にある文字・画像を完全に削除します。
+                文字をなぞる（または四角で囲む）と墨消し対象になり、
+                <b>「墨消しを適用」</b>で下にある文字・画像を完全に削除します。
               </p>
               <button onClick={open}>PDFを開く…</button>
               <p className="empty-hint">

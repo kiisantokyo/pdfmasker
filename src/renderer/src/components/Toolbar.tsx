@@ -1,9 +1,13 @@
+import type { SelectMode } from '@shared/types'
+
 interface Props {
   hasDoc: boolean
   pendingCount: number
   zoom: number
   busy: boolean
   dirty: boolean
+  selectMode: SelectMode
+  onToggleSelectMode: () => void
   onOpen: () => void
   onApplyRedactions: () => void
   onClearPending: () => void
@@ -25,6 +29,16 @@ export default function Toolbar(props: Props): React.JSX.Element {
     <div className="toolbar">
       <button onClick={props.onOpen} disabled={busy}>
         開く…
+      </button>
+
+      <span className="sep" />
+
+      <button
+        onClick={props.onToggleSelectMode}
+        disabled={d}
+        title="ドラッグの選択方法を切り替えます（文字をなぞる／四角で囲む）"
+      >
+        {props.selectMode === 'text' ? '選択：文字なぞり' : '選択：四角'}
       </button>
 
       <span className="sep" />

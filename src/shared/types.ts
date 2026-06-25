@@ -44,6 +44,9 @@ export interface RenderedPage {
 /** Rotate a page by this many degrees (clockwise). */
 export type RotateDelta = 90 | 180 | 270 | -90
 
+/** Redaction selection mode: trace over text, or draw a freehand rectangle. */
+export type SelectMode = 'text' | 'rect'
+
 /** A word found at a click point, with its bounding box as a redaction rect. */
 export interface WordHit {
   word: string
@@ -78,6 +81,7 @@ export const IPC = {
   renderPage: 'pdf:renderPage',
   applyRedactions: 'pdf:applyRedactions',
   wordAt: 'pdf:wordAt',
+  selectText: 'pdf:selectText',
   findWord: 'pdf:findWord',
   extractCandidates: 'pdf:extractCandidates',
   countTerms: 'pdf:countTerms',
