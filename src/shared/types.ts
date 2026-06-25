@@ -1,0 +1,59 @@
+// Shared types used across main / preload / renderer.
+
+/** Per-page geometry, in PDF points (1pt = 1/72 inch). */
+export interface PageInfo {
+  index: number
+  /** Page width in PDF points, after rotation is accounted for by mupdf bounds. */
+  width: number
+  height: number
+  /** Page /Rotate value: 0 | 90 | 180 | 270. */
+  rotation: number
+}
+
+export interface DocumentInfo {
+  /** Absolute path on disk, or null for an unsaved/in-memory document. */
+  path: string | null
+  name: string
+  pageCount: number
+  pages: PageInfo[]
+}
+
+/**
+ * A redaction region, expressed in *page space* (PDF points, top-left origin,
+ * y increasing downward — the same space mupdf uses for annotation rects).
+ */
+export interface RedactionRect {
+  pageIndex: number
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
+export interface RenderedPage {
+  index: number
+  /** PNG bytes of the rendered page. */
+  png: Uint8Array
+  /** Pixel dimensions of the PNG. */
+  pixelWidth: number
+  pixelHeight: number
+  /** zoom = pixels-per-point used for rendering. */
+  zoom: number
+}
+
+/** Rotate a page by this many degrees (clockwise). */
+export type RotateDelta = 90 | 180 | 270 | -90
+
+export const IPC = {
+  open: 'pdf:open',
+  openFromPath: 'pdf:openFromPath',
+  info: 'pdf:info',
+  renderPage: 'pdf:renderPage',
+  applyRedactions: 'pdf:applyRedactions',
+  deletePage: 'pdf:deletePage',
+  movePage: 'pdf:movePage',
+  rotatePage: 'pdf:rotatePage',
+  save: 'pdf:save',
+  saveAs: 'pdf:saveAs',
+  hasUnsavedChanges: 'pdf:hasUnsavedChanges'
+} as const
