@@ -523,9 +523,20 @@ export function extractCandidates(): TermCount[] {
   for (const [term, kind] of found) {
     out.push({ term, kind, count: countOccurrences(text, term) })
   }
+  // Drop short fragments that are substrings of a longer candidate which
+  // accounts for most of their occurrences (e.g. "サンプルソ" ⊂ "サンプルソフト").
+  const deNoised = out.filter(
+    (x) =>
+      !out.some(
+        (y) =>
+          y.term.length > x.term.length &&
+          y.term.includes(x.term) &&
+          y.count >= x.count * 0.7
+      )
+  )
   // Most frequent first, then longer terms; cap to keep the list manageable.
-  out.sort((a, b) => b.count - a.count || b.term.length - a.term.length)
-  return out.slice(0, 200)
+  deNoised.sort((a, b) => b.count - a.count || b.term.length - a.term.length)
+  return deNoised.slice(0, 200)
 }
 
 /** Count document occurrences for a set of terms (drops zero-count terms). */

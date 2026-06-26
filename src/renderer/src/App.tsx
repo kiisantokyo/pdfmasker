@@ -227,6 +227,22 @@ export default function App(): React.JSX.Element {
       setStatus(`${n} 箇所に黄色マーカーを引きました。`)
     }, '黄色マーカー')
 
+  const searchAdd = (keyword: string): Promise<void> =>
+    run(async () => {
+      const term = keyword.trim()
+      if (!term) return
+      const rects = await pdfApi.findWord(term)
+      if (rects.length === 0) {
+        setStatus(`「${term}」は見つかりませんでした。`)
+        return
+      }
+      commitMarks([...pending, ...rects])
+      setLastSelText(term)
+      setStatus(
+        `「${term}」を ${rects.length} 箇所、選択に追加しました。上部の「墨」または「黄」で処理します。`
+      )
+    }, 'キーワード検索')
+
   const expandSameWord = (): Promise<void> =>
     run(async () => {
       const term = lastSelText.trim()
@@ -763,6 +779,7 @@ export default function App(): React.JSX.Element {
         onHighlight={applyHighlight}
         onExpandSameWord={expandSameWord}
         canExpand={lastSelText.trim().length > 0}
+        onSearchAdd={searchAdd}
         onClearPending={() => commitMarks([])}
         onUndo={doUndo}
         onRedo={doRedo}

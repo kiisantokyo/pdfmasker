@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { SelectMode } from '@shared/types'
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
   onHighlight: () => void
   onExpandSameWord: () => void
   canExpand: boolean
+  onSearchAdd: (keyword: string) => void
   onClearPending: () => void
   onRedactByTerms: () => void
   onRotateLeft: () => void
@@ -34,6 +36,10 @@ interface Props {
 export default function Toolbar(props: Props): React.JSX.Element {
   const { hasDoc, pendingCount, zoom, busy } = props
   const d = !hasDoc || busy
+  const [kw, setKw] = useState('')
+  const submitSearch = (): void => {
+    if (kw.trim()) props.onSearchAdd(kw)
+  }
   return (
     <div className="toolbar">
       <button onClick={props.onOpen} disabled={busy}>
@@ -101,6 +107,27 @@ export default function Toolbar(props: Props): React.JSX.Element {
       >
         ✕
       </button>
+
+      <span className="search-box">
+        <input
+          type="text"
+          className="search-input"
+          placeholder="キーワードで検索"
+          value={kw}
+          disabled={d}
+          onChange={(e) => setKw(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submitSearch()
+          }}
+        />
+        <button
+          onClick={submitSearch}
+          disabled={d || !kw.trim()}
+          title="入力した語を文書内から検索し、選択に追加します"
+        >
+          🔍 追加
+        </button>
+      </span>
       <button
         onClick={props.onRedactByTerms}
         disabled={d}
