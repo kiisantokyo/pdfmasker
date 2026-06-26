@@ -306,6 +306,15 @@ body {
   border-radius: 6px;
   padding: 0 5px;
 }
+.page-resize {
+  font-size: 10px;
+  color: #1d7a4d;
+  border: 1px solid #8fd0ad;
+  background: #eaf7f0;
+  border-radius: 6px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
 .page-dims {
   color: var(--muted);
   font-size: 11px;

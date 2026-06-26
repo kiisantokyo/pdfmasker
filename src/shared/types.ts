@@ -8,6 +8,9 @@ export interface PageInfo {
   height: number
   /** Page /Rotate value: 0 | 90 | 180 | 270. */
   rotation: number
+  /** Original size (PDF points) before a paper-size change, if any. */
+  origWidth?: number
+  origHeight?: number
 }
 
 export interface DocumentInfo {
