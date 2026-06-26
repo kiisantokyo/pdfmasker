@@ -114,12 +114,18 @@ export default function PageSidebar({
 }: Props): React.JSX.Element {
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const anchor = useRef<number | null>(null)
+  const activeRef = useRef<HTMLDivElement>(null)
 
   // Selection is position-based, so reset it whenever the page set changes.
   useEffect(() => {
     setChecked(new Set())
     anchor.current = null
   }, [doc.pageCount, refreshKey])
+
+  // Follow the main view: scroll the current page's thumbnail into view.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [currentPage])
 
   const toggle = (index: number): void =>
     setChecked((prev) => {
@@ -206,6 +212,7 @@ export default function PageSidebar({
           return (
             <li key={p.index}>
               <div
+                ref={p.index === currentPage ? activeRef : undefined}
                 className={
                   'page-item' +
                   (p.index === currentPage ? ' active' : '') +
