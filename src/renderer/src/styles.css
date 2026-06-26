@@ -81,6 +81,29 @@ body {
   margin: 0 4px;
 }
 
+/* Keyword search box */
+.search-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.search-input {
+  width: 130px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 12px;
+}
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.search-input:disabled {
+  opacity: 0.4;
+}
+
 /* Action buttons (墨 / 黄) */
 .toolbar button.act {
   display: inline-flex;
