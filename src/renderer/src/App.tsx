@@ -149,17 +149,19 @@ export default function App(): React.JSX.Element {
       setStatus(`${removed} 箇所を墨消ししました（下の文字・画像を削除）。`)
     }, '墨消しの適用')
 
-  const rotate = (): Promise<void> =>
+  const rotate = (delta: RotateDelta): Promise<void> =>
     run(async () => {
       if (!doc) return
-      const info = await pdfApi.rotatePage(currentPage, 90)
+      const info = await pdfApi.rotatePage(currentPage, delta)
       const next = pending.filter((r) => r.pageIndex !== currentPage)
       pushHist(true, pending, next)
       setDoc(info)
       setPending(next)
       setDirty(true)
       setRefreshKey((k) => k + 1)
-      setStatus(`ページ ${currentPage + 1} を回転しました。`)
+      setStatus(
+        `ページ ${currentPage + 1} を${delta < 0 ? '左' : '右'}に回転しました。`
+      )
     }, '回転')
 
   const applyBinding = (): Promise<void> =>
@@ -522,7 +524,8 @@ export default function App(): React.JSX.Element {
         canUndo={canUndo}
         canRedo={canRedo}
         onRedactByTerms={() => setTermsOpen(true)}
-        onRotate={rotate}
+        onRotateLeft={() => rotate(-90)}
+        onRotateRight={() => rotate(90)}
         onBindingMargin={() => setBindingOpen(true)}
         onDeletePage={deletePage}
         onMoveUp={() => move(-1)}
