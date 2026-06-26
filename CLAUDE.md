@@ -18,6 +18,10 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
 - 単語クリック: `wordAt`（snap("words")＋中央ライン水平スイープでテキスト取得）/ `findWord`（page.search）。
 - なぞって選択: `selectText`（StructuredText.highlight でテキスト選択quad）。選択モードは
   `SelectMode='text'|'rect'`（既定 text）。ドラッグ中はIPCをthrottle(40ms)してライブプレビュー。
+- 選択→処理の分離（ポップアップ廃止）: なぞる/クリック/四角は `pending`（選択セット, 青オーバーレイ）に
+  **加算**。上部ツールバーの「墨(N)」=`applyRedactions`（破壊削除）/「黄(N)」=`highlightRects`（Highlight注釈）/
+  「同語＋」=直前選択テキスト`lastSelText`で`findWord`して選択追加/「✕」=クリア。`selectionString` が
+  選択範囲のテキスト＋矩形を返す（OCRフォールバック対応）。黄マーカーは `renderPage` の showExtras=true で描画。
 - ページ一覧の表示: pt寸法は分かりにくいので `PageSidebar` の `sizeLabel` で A4縦 等の用紙名に変換
   （許容±4mm、未一致は mm 表記）。
 - サムネイルサイドバー: `PageSidebar` が実画像サムネ（`Thumb` が IntersectionObserver で遅延レンダ、

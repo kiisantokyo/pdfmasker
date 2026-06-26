@@ -13,7 +13,10 @@ interface Props {
   onUndo: () => void
   onRedo: () => void
   onOpen: () => void
-  onApplyRedactions: () => void
+  onRedact: () => void
+  onHighlight: () => void
+  onExpandSameWord: () => void
+  canExpand: boolean
   onClearPending: () => void
   onRedactByTerms: () => void
   onRotateLeft: () => void
@@ -67,15 +70,36 @@ export default function Toolbar(props: Props): React.JSX.Element {
       <span className="sep" />
 
       <button
-        className="danger"
-        onClick={props.onApplyRedactions}
+        className="act act-redact"
+        onClick={props.onRedact}
         disabled={d || pendingCount === 0}
-        title="マークした領域の下にある文字・画像を完全に削除します"
+        title="選択した範囲の下にある文字・画像を完全に削除します"
       >
-        墨消しを適用 ({pendingCount})
+        <span className="act-icon">■</span>墨
+        <span className="act-count">{pendingCount}</span>
       </button>
-      <button onClick={props.onClearPending} disabled={d || pendingCount === 0}>
-        マークを消去
+      <button
+        className="act act-highlight"
+        onClick={props.onHighlight}
+        disabled={d || pendingCount === 0}
+        title="選択した範囲に薄い黄色のマーカーを引きます（非破壊）"
+      >
+        <span className="act-icon">▥</span>黄
+        <span className="act-count">{pendingCount}</span>
+      </button>
+      <button
+        onClick={props.onExpandSameWord}
+        disabled={d || !props.canExpand}
+        title="直前に選んだ文字列と同じ語を文書内から探して選択に追加します"
+      >
+        同語＋
+      </button>
+      <button
+        onClick={props.onClearPending}
+        disabled={d || pendingCount === 0}
+        title="選択をクリア"
+      >
+        ✕
       </button>
       <button
         onClick={props.onRedactByTerms}

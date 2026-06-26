@@ -101,12 +101,14 @@ export default function PageCanvas({
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(bmp, 0, 0)
 
-    ctx.fillStyle = 'rgba(220, 38, 38, 0.45)'
-    ctx.strokeStyle = 'rgba(220, 38, 38, 0.95)'
+    // Selected (not-yet-processed) ranges use a neutral blue — they can become
+    // either a redaction (墨) or a highlight (黄) from the toolbar.
+    ctx.fillStyle = 'rgba(37, 99, 235, 0.30)'
+    ctx.strokeStyle = 'rgba(37, 99, 235, 0.90)'
     ctx.lineWidth = 1
     for (const r of pendingRects) fillRectPt(ctx, r)
 
-    // Live text selection preview (red, matches committed look).
+    // Live text selection preview while dragging.
     for (const r of textPreview) fillRectPt(ctx, r)
 
     // Freehand rectangle preview (rect mode only) — blue.

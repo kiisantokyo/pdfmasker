@@ -58,12 +58,8 @@ export default function App(): React.JSX.Element {
   const onVisiblePage = useCallback((index: number) => {
     setCurrentPage(index)
   }, [])
-  const [wordMenu, setWordMenu] = useState<{
-    rects: RedactionRect[]
-    x: number
-    y: number
-  } | null>(null)
-  const [wordEdit, setWordEdit] = useState('')
+  // Text of the most recent selection, used by the "同語＋" toolbar button.
+  const [lastSelText, setLastSelText] = useState('')
   const [termsOpen, setTermsOpen] = useState(false)
   const [bindingOpen, setBindingOpen] = useState(false)
   const [bindSide, setBindSide] = useState<BindingSide>('left')
@@ -208,6 +204,28 @@ export default function App(): React.JSX.Element {
       setStatus(`${removed} 箇所を墨消ししました（下の文字・画像を削除）。`)
     }, '墨消しの適用')
 
+  const applyHighlight = (): Promise<void> =>
+    run(async () => {
+      if (pending.length === 0) return
+      const info = await pdfApi.highlight(pending)
+      pushHist(true, pending, [])
+      setDoc(info)
+      const n = pending.length
+      setPending([])
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setStatus(`${n} 箇所に黄色マーカーを引きました。`)
+    }, '黄色マーカー')
+
+  const expandSameWord = (): Promise<void> =>
+    run(async () => {
+      const term = lastSelText.trim()
+      if (!term) return
+      const rects = await pdfApi.findWord(term)
+      commitMarks([...pending, ...rects])
+      setStatus(`「${term}」を ${rects.length} 箇所、選択に追加しました。`)
+    }, '同語の追加')
+
   const rotate = (delta: RotateDelta): Promise<void> =>
     run(async () => {
       if (!doc) return
@@ -341,26 +359,28 @@ export default function App(): React.JSX.Element {
       }
     }, '名前を付けて保存')
 
+  // Clicking a word adds it to the selection (and remembers its text).
   const onWordClick = (
     pageIndex: number,
     pagePt: { x: number; y: number },
-    clientPt: { x: number; y: number }
+    _clientPt: { x: number; y: number }
   ): Promise<void> =>
     run(async () => {
       const hit = await pdfApi.wordAt(pageIndex, pagePt.x, pagePt.y)
       if (!hit) {
-        setWordMenu(null)
         setStatus('単語が見つかりませんでした（画像化されたPDFかもしれません）。')
         return
       }
-      setWordMenu({ rects: [hit.rect], x: clientPt.x, y: clientPt.y })
-      setWordEdit(hit.word)
+      commitMarks([...pending, hit.rect])
+      setLastSelText(hit.word)
+      setStatus('選択に追加しました。上部の「墨」または「黄」で処理します。')
     }, '単語の選択')
 
+  // Dragging text adds the selection (accumulates) and remembers its text.
   const onTextSelect = (
     pageIndex: number,
     sel: { x0: number; y0: number; x1: number; y1: number },
-    clientPt: { x: number; y: number }
+    _clientPt: { x: number; y: number }
   ): Promise<void> =>
     run(async () => {
       const res = await pdfApi.selectionString(
@@ -374,53 +394,12 @@ export default function App(): React.JSX.Element {
         setStatus('文字を選択できませんでした。')
         return
       }
-      setWordMenu({ rects: res.rects, x: clientPt.x, y: clientPt.y })
-      setWordEdit(res.text)
+      commitMarks([...pending, ...res.rects])
+      setLastSelText(res.text)
+      setStatus(
+        `${res.rects.length} 箇所を選択に追加しました。上部の「墨」または「黄」で処理します。`
+      )
     }, '範囲の選択')
-
-  const redactWordOnce = (): void => {
-    if (!wordMenu) return
-    commitMarks([...pending, ...wordMenu.rects])
-    setStatus('選択範囲をマークしました。')
-    setWordMenu(null)
-  }
-
-  const redactWordAll = (): Promise<void> =>
-    run(async () => {
-      const term = wordEdit.trim()
-      if (!term) return
-      const rects = await pdfApi.findWord(term)
-      commitMarks([...pending, ...rects])
-      setStatus(`「${term}」を文書内 ${rects.length} 箇所マークしました。`)
-      setWordMenu(null)
-    }, '単語の一括選択')
-
-  const highlightSelection = (): Promise<void> =>
-    run(async () => {
-      if (!wordMenu) return
-      const info = await pdfApi.highlight(wordMenu.rects)
-      pushHist(true, pending, pending)
-      setDoc(info)
-      setDirty(true)
-      setRefreshKey((k) => k + 1)
-      setStatus('選択範囲に黄色マーカーを引きました。')
-      setWordMenu(null)
-    }, '黄色マーカー')
-
-  const highlightAll = (): Promise<void> =>
-    run(async () => {
-      const term = wordEdit.trim()
-      if (!term) return
-      const rects = await pdfApi.findWord(term)
-      if (rects.length === 0) return
-      const info = await pdfApi.highlight(rects)
-      pushHist(true, pending, pending)
-      setDoc(info)
-      setDirty(true)
-      setRefreshKey((k) => k + 1)
-      setStatus(`「${term}」を文書内 ${rects.length} 箇所に黄色マーカー。`)
-      setWordMenu(null)
-    }, '黄色マーカー')
 
   const doUndo = useCallback(
     (): Promise<void> =>
@@ -526,36 +505,6 @@ export default function App(): React.JSX.Element {
             ここにPDFをドロップして開く
           </div>
         </div>
-      )}
-
-      {wordMenu && (
-        <>
-          <div className="menu-backdrop" onClick={() => setWordMenu(null)} />
-          <div
-            className="word-menu"
-            style={{ left: wordMenu.x, top: wordMenu.y }}
-          >
-            <div className="word-menu-head">
-              対象の語（編集できます）
-            </div>
-            <input
-              className="word-menu-input"
-              value={wordEdit}
-              onChange={(e) => setWordEdit(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void redactWordAll()
-              }}
-            />
-            <button onClick={redactWordOnce}>選択範囲を墨消し</button>
-            <button onClick={redactWordAll}>この語を文書内すべて墨消し</button>
-            <div className="word-menu-sep" />
-            <button onClick={highlightSelection}>選択範囲に黄色マーカー</button>
-            <button onClick={highlightAll}>この語を文書内すべて黄色マーカー</button>
-            <button className="word-menu-cancel" onClick={() => setWordMenu(null)}>
-              キャンセル
-            </button>
-          </div>
-        </>
       )}
 
       {termsOpen && (
@@ -779,7 +728,10 @@ export default function App(): React.JSX.Element {
           setSelectMode((m) => (m === 'text' ? 'rect' : 'text'))
         }
         onOpen={open}
-        onApplyRedactions={applyRedactions}
+        onRedact={applyRedactions}
+        onHighlight={applyHighlight}
+        onExpandSameWord={expandSameWord}
+        canExpand={lastSelText.trim().length > 0}
         onClearPending={() => commitMarks([])}
         onUndo={doUndo}
         onRedo={doRedo}
