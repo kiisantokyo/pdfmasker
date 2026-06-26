@@ -99,6 +99,16 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.documentText, () => pdf.getDocumentText())
 
+  ipcMain.handle(IPC.needsOcr, () => pdf.needsOcr())
+
+  ipcMain.handle(IPC.runOcr, async (e) => {
+    const cachePath = join(app.getPath('userData'), 'tessdata')
+    const total = await pdf.runOcr(cachePath, (page, count) => {
+      e.sender.send(IPC.ocrProgress, { page, count })
+    })
+    return { total, info: pdf.getInfo() }
+  })
+
   ipcMain.handle(IPC.deletePage, (_e, index: number) => pdf.deletePage(index))
 
   ipcMain.handle(IPC.deletePages, (_e, indices: number[]) =>

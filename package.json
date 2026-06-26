@@ -20,7 +20,8 @@
   "dependencies": {
     "mupdf": "^1.27.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@rollup/wasm-node": "^4.62.2",

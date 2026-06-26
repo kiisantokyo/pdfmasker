@@ -2,6 +2,7 @@
 // in plain Node. Holds a single open document as module state (MVP: one doc).
 
 import * as mupdf from 'mupdf'
+import Tesseract from 'tesseract.js'
 import type {
   BindingMarginOptions,
   DocumentInfo,
@@ -16,6 +17,18 @@ import type {
 let doc: mupdf.PDFDocument | null = null
 let currentPath: string | null = null
 let currentName = 'untitled.pdf'
+
+/** A word recognised by OCR, in page-space points (top-left origin). */
+interface OcrWord {
+  text: string
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+/** Per-page OCR results; null until OCR has been run on a text-less PDF. */
+let ocr: Map<number, OcrWord[]> | null = null
+const OCR_DPI = 200
 
 function requireDoc(): mupdf.PDFDocument {
   if (!doc) throw new Error('No PDF document is open')
@@ -105,6 +118,7 @@ export function loadDocument(
   doc = pdf
   currentName = name
   currentPath = path
+  ocr = null
   // Enable the journal so every mutation can be undone/redone.
   pdf.enableJournal()
   return getInfo()
@@ -188,8 +202,10 @@ export function wordAt(pageIndex: number, x: number, y: number): WordHit | null 
   const pt: mupdf.Point = [x, y]
   const quad = stext.snap(pt, pt, 'words')
   const box = quadToBox(quad)
-  // Degenerate quad => no word under the cursor.
-  if (box.x1 - box.x0 < 0.5 || box.y1 - box.y0 < 0.5) return null
+  // Degenerate quad => no native word under the cursor; try OCR.
+  if (box.x1 - box.x0 < 0.5 || box.y1 - box.y0 < 0.5) {
+    return ocrWordAt(pageIndex, x, y)
+  }
   // copy() selects in reading order, so a ul->lr selection grabs the whole
   // line. Sweep horizontally through the word's mid-line to get just the word.
   const cy = (box.y0 + box.y1) / 2
@@ -197,8 +213,22 @@ export function wordAt(pageIndex: number, x: number, y: number): WordHit | null 
     .copy([box.x0 + 0.5, cy], [box.x1 - 0.5, cy])
     .replace(/\s+/g, ' ')
     .trim()
-  if (!word) return null
-  return { word, rect: { pageIndex, ...box } }
+  if (word) return { word, rect: { pageIndex, ...box } }
+  return ocrWordAt(pageIndex, x, y)
+}
+
+/** Word lookup against OCR results (used for scanned PDFs). */
+function ocrWordAt(pageIndex: number, x: number, y: number): WordHit | null {
+  const words = ocr?.get(pageIndex)
+  if (!words) return null
+  const hit = words.find(
+    (w) => x >= w.x0 && x <= w.x1 && y >= w.y0 && y <= w.y1
+  )
+  if (!hit) return null
+  return {
+    word: hit.text,
+    rect: { pageIndex, x0: hit.x0, y0: hit.y0, x1: hit.x1, y1: hit.y1 }
+  }
 }
 
 /**
@@ -215,7 +245,17 @@ export function selectText(
   const d = requireDoc()
   const stext = d.loadPage(pageIndex).toStructuredText()
   const quads = stext.highlight([x0, y0], [x1, y1], 500)
-  return quads.map((q) => ({ pageIndex, ...quadToBox(q) }))
+  if (quads.length) return quads.map((q) => ({ pageIndex, ...quadToBox(q) }))
+  // Fallback: OCR words intersecting the dragged region (scanned PDFs).
+  const words = ocr?.get(pageIndex)
+  if (!words) return []
+  const lx = Math.min(x0, x1)
+  const ly = Math.min(y0, y1)
+  const hx = Math.max(x0, x1)
+  const hy = Math.max(y0, y1)
+  return words
+    .filter((w) => w.x0 < hx && w.x1 > lx && w.y0 < hy && w.y1 > ly)
+    .map((w) => ({ pageIndex, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1 }))
 }
 
 /** Find every occurrence of `needle` across all pages (case-insensitive). */
@@ -235,18 +275,112 @@ export function findWord(needle: string): RedactionRect[] {
       }
     }
   }
+  // Fallback: search OCR words when the PDF has no native text.
+  if (rects.length === 0 && ocr) {
+    const low = trimmed.toLowerCase()
+    for (const [i, words] of ocr) {
+      for (const w of words) {
+        if (w.text.toLowerCase().includes(low)) {
+          rects.push({ pageIndex: i, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1 })
+        }
+      }
+    }
+  }
   return rects
 }
 
-/** Concatenated plain text of the whole document. */
+/** Concatenated plain text of the whole document (OCR fallback if no native text). */
 function documentText(): string {
   const d = requireDoc()
   const parts: string[] = []
   const count = d.countPages()
+  let hasNative = false
   for (let i = 0; i < count; i++) {
-    parts.push(d.loadPage(i).toStructuredText().asText())
+    const t = d.loadPage(i).toStructuredText().asText()
+    if (t.trim()) hasNative = true
+    parts.push(t)
   }
-  return parts.join('\n')
+  if (hasNative || !ocr) return parts.join('\n')
+  const op: string[] = []
+  for (let i = 0; i < count; i++) {
+    op.push((ocr.get(i) ?? []).map((w) => w.text).join(' '))
+  }
+  return op.join('\n')
+}
+
+/** True when the document has no extractable text (a scan that needs OCR). */
+export function needsOcr(): boolean {
+  if (!doc || ocr) return false
+  const count = doc.countPages()
+  for (let i = 0; i < count; i++) {
+    if (doc.loadPage(i).toStructuredText().asText().trim()) return false
+  }
+  return true
+}
+
+export function isOcrApplied(): boolean {
+  return ocr !== null
+}
+
+/**
+ * Run offline OCR (jpn+eng) on every page and keep the words in memory so the
+ * search / click / extract features work on scanned PDFs. `cachePath` is where
+ * Tesseract stores the downloaded language model (first run needs network).
+ */
+export async function runOcr(
+  cachePath: string,
+  onProgress?: (page: number, total: number) => void
+): Promise<number> {
+  const d = requireDoc()
+  const count = d.countPages()
+  const zoom = OCR_DPI / 72
+  const worker = await Tesseract.createWorker('jpn+eng', Tesseract.OEM.LSTM_ONLY, {
+    cachePath
+  })
+  try {
+    const map = new Map<number, OcrWord[]>()
+    let total = 0
+    for (let i = 0; i < count; i++) {
+      const page = d.loadPage(i)
+      const pix = page.toPixmap(
+        mupdf.Matrix.scale(zoom, zoom),
+        mupdf.ColorSpace.DeviceRGB,
+        false
+      )
+      const png = pix.asPNG()
+      pix.destroy?.()
+      const { data } = await worker.recognize(
+        Buffer.from(png),
+        {},
+        { blocks: true }
+      )
+      const words: OcrWord[] = []
+      for (const block of data.blocks ?? []) {
+        for (const para of block.paragraphs) {
+          for (const line of para.lines) {
+            for (const w of line.words) {
+              const text = w.text?.trim()
+              if (!text) continue
+              words.push({
+                text,
+                x0: w.bbox.x0 / zoom,
+                y0: w.bbox.y0 / zoom,
+                x1: w.bbox.x1 / zoom,
+                y1: w.bbox.y1 / zoom
+              })
+            }
+          }
+        }
+      }
+      map.set(i, words)
+      total += words.length
+      onProgress?.(i + 1, count)
+    }
+    ocr = map
+    return total
+  } finally {
+    await worker.terminate()
+  }
 }
 
 function countOccurrences(text: string, term: string): number {
