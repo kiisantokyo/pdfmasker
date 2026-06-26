@@ -17,6 +17,11 @@ interface Props {
     pagePt: { x: number; y: number },
     clientPt: { x: number; y: number }
   ) => void
+  onTextSelect: (
+    pageIndex: number,
+    sel: { x0: number; y0: number; x1: number; y1: number },
+    clientPt: { x: number; y: number }
+  ) => void
   onZoomChange: (z: number) => void
 }
 
@@ -30,6 +35,7 @@ export default function ContinuousViewer({
   onVisiblePage,
   onAddRects,
   onWordClick,
+  onTextSelect,
   onZoomChange
 }: Props): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -101,6 +107,7 @@ export default function ContinuousViewer({
                 refreshKey={refreshKey}
                 onAddRects={onAddRects}
                 onWordClick={onWordClick}
+                onTextSelect={onTextSelect}
                 onZoomChange={onZoomChange}
               />
             ) : (

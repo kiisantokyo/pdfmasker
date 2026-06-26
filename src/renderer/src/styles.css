@@ -411,6 +411,11 @@ body {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
+.word-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
 .word-menu-cancel {
   color: var(--muted) !important;
   font-size: 12px !important;

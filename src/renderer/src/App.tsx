@@ -4,8 +4,7 @@ import type {
   DocumentInfo,
   RedactionRect,
   RotateDelta,
-  SelectMode,
-  WordHit
+  SelectMode
 } from '@shared/types'
 import { pdfApi } from './lib/api'
 import Toolbar from './components/Toolbar'
@@ -59,9 +58,11 @@ export default function App(): React.JSX.Element {
   const onVisiblePage = useCallback((index: number) => {
     setCurrentPage(index)
   }, [])
-  const [wordMenu, setWordMenu] = useState<
-    (WordHit & { x: number; y: number }) | null
-  >(null)
+  const [wordMenu, setWordMenu] = useState<{
+    rects: RedactionRect[]
+    x: number
+    y: number
+  } | null>(null)
   const [wordEdit, setWordEdit] = useState('')
   const [termsOpen, setTermsOpen] = useState(false)
   const [bindingOpen, setBindingOpen] = useState(false)
@@ -352,14 +353,35 @@ export default function App(): React.JSX.Element {
         setStatus('単語が見つかりませんでした（画像化されたPDFかもしれません）。')
         return
       }
-      setWordMenu({ ...hit, x: clientPt.x, y: clientPt.y })
+      setWordMenu({ rects: [hit.rect], x: clientPt.x, y: clientPt.y })
       setWordEdit(hit.word)
     }, '単語の選択')
 
+  const onTextSelect = (
+    pageIndex: number,
+    sel: { x0: number; y0: number; x1: number; y1: number },
+    clientPt: { x: number; y: number }
+  ): Promise<void> =>
+    run(async () => {
+      const res = await pdfApi.selectionString(
+        pageIndex,
+        sel.x0,
+        sel.y0,
+        sel.x1,
+        sel.y1
+      )
+      if (res.rects.length === 0) {
+        setStatus('文字を選択できませんでした。')
+        return
+      }
+      setWordMenu({ rects: res.rects, x: clientPt.x, y: clientPt.y })
+      setWordEdit(res.text)
+    }, '範囲の選択')
+
   const redactWordOnce = (): void => {
     if (!wordMenu) return
-    commitMarks([...pending, wordMenu.rect])
-    setStatus('クリックした箇所をマークしました。')
+    commitMarks([...pending, ...wordMenu.rects])
+    setStatus('選択範囲をマークしました。')
     setWordMenu(null)
   }
 
@@ -372,6 +394,33 @@ export default function App(): React.JSX.Element {
       setStatus(`「${term}」を文書内 ${rects.length} 箇所マークしました。`)
       setWordMenu(null)
     }, '単語の一括選択')
+
+  const highlightSelection = (): Promise<void> =>
+    run(async () => {
+      if (!wordMenu) return
+      const info = await pdfApi.highlight(wordMenu.rects)
+      pushHist(true, pending, pending)
+      setDoc(info)
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setStatus('選択範囲に黄色マーカーを引きました。')
+      setWordMenu(null)
+    }, '黄色マーカー')
+
+  const highlightAll = (): Promise<void> =>
+    run(async () => {
+      const term = wordEdit.trim()
+      if (!term) return
+      const rects = await pdfApi.findWord(term)
+      if (rects.length === 0) return
+      const info = await pdfApi.highlight(rects)
+      pushHist(true, pending, pending)
+      setDoc(info)
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setStatus(`「${term}」を文書内 ${rects.length} 箇所に黄色マーカー。`)
+      setWordMenu(null)
+    }, '黄色マーカー')
 
   const doUndo = useCallback(
     (): Promise<void> =>
@@ -487,7 +536,7 @@ export default function App(): React.JSX.Element {
             style={{ left: wordMenu.x, top: wordMenu.y }}
           >
             <div className="word-menu-head">
-              墨消しする語（編集できます）
+              対象の語（編集できます）
             </div>
             <input
               className="word-menu-input"
@@ -497,8 +546,11 @@ export default function App(): React.JSX.Element {
                 if (e.key === 'Enter') void redactWordAll()
               }}
             />
-            <button onClick={redactWordOnce}>クリックした箇所のみ墨消し</button>
+            <button onClick={redactWordOnce}>選択範囲を墨消し</button>
             <button onClick={redactWordAll}>この語を文書内すべて墨消し</button>
+            <div className="word-menu-sep" />
+            <button onClick={highlightSelection}>選択範囲に黄色マーカー</button>
+            <button onClick={highlightAll}>この語を文書内すべて黄色マーカー</button>
             <button className="word-menu-cancel" onClick={() => setWordMenu(null)}>
               キャンセル
             </button>
@@ -778,6 +830,7 @@ export default function App(): React.JSX.Element {
             onVisiblePage={onVisiblePage}
             onAddRects={(rs) => commitMarks([...pending, ...rs])}
             onWordClick={onWordClick}
+            onTextSelect={onTextSelect}
             onZoomChange={clampZoom}
           />
         ) : (
