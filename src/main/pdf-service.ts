@@ -75,11 +75,16 @@ function buildPageInfo(): PageInfo[] {
   for (let i = 0; i < count; i++) {
     const page = d.loadPage(i)
     const [x0, y0, x1, y1] = page.getBounds()
+    const obj = page.getObject()
+    const ow = obj.get('PMOrigW')
+    const oh = obj.get('PMOrigH')
     pages.push({
       index: i,
       width: Math.abs(x1 - x0),
       height: Math.abs(y1 - y0),
-      rotation: readRotation(page)
+      rotation: readRotation(page),
+      origWidth: ow && ow.isNumber() ? ow.asNumber() : undefined,
+      origHeight: oh && oh.isNumber() ? oh.asNumber() : undefined
     })
   }
   return pages
@@ -185,6 +190,19 @@ export function applyRedactions(rects: RedactionRect[]): void {
   })
 }
 
+/**
+ * Reject quads from snap()/highlight() that are rotated (e.g. a diagonal "社外秘"
+ * watermark) or implausibly tall — these would add a giant box to the selection
+ * when the user clicks/drags near non-body text. Normal body text is upright
+ * (top edge horizontal, left edge vertical) and within a sane line height.
+ */
+function plausibleQuad(q: mupdf.Quad): boolean {
+  const tol = 2
+  if (Math.abs(q[1] - q[3]) > tol || Math.abs(q[0] - q[4]) > tol) return false
+  const h = Math.max(q[1], q[3], q[5], q[7]) - Math.min(q[1], q[3], q[5], q[7])
+  return h <= 80
+}
+
 /** Convert a mupdf Quad ([ulx,uly, urx,ury, llx,lly, lrx,lry]) to a bbox. */
 function quadToBox(q: mupdf.Quad): { x0: number; y0: number; x1: number; y1: number } {
   const xs = [q[0], q[2], q[4], q[6]]
@@ -205,8 +223,9 @@ export function wordAt(pageIndex: number, x: number, y: number): WordHit | null 
   const pt: mupdf.Point = [x, y]
   const quad = stext.snap(pt, pt, 'words')
   const box = quadToBox(quad)
-  // Degenerate quad => no native word under the cursor; try OCR.
-  if (box.x1 - box.x0 < 0.5 || box.y1 - box.y0 < 0.5) {
+  // Degenerate quad, or a rotated/oversized one (watermark etc.) => no usable
+  // native word under the cursor; try OCR instead.
+  if (box.x1 - box.x0 < 0.5 || box.y1 - box.y0 < 0.5 || !plausibleQuad(quad)) {
     return ocrWordAt(pageIndex, x, y)
   }
   // copy() selects in reading order, so a ul->lr selection grabs the whole
@@ -288,7 +307,7 @@ export function selectText(
 ): RedactionRect[] {
   const d = requireDoc()
   const stext = d.loadPage(pageIndex).toStructuredText()
-  const quads = stext.highlight([x0, y0], [x1, y1], 500)
+  const quads = stext.highlight([x0, y0], [x1, y1], 500).filter(plausibleQuad)
   if (quads.length) return quads.map((q) => ({ pageIndex, ...quadToBox(q) }))
   // Fallback: OCR words intersecting the dragged region (scanned PDFs),
   // merged into one rectangle per line.
@@ -308,7 +327,7 @@ export function selectionString(
 ): { text: string; rects: RedactionRect[] } {
   const d = requireDoc()
   const stext = d.loadPage(pageIndex).toStructuredText()
-  const quads = stext.highlight([x0, y0], [x1, y1], 500)
+  const quads = stext.highlight([x0, y0], [x1, y1], 500).filter(plausibleQuad)
   if (quads.length) {
     const text = stext.copy([x0, y0], [x1, y1]).replace(/\s+/g, ' ').trim()
     return { text, rects: quads.map((q) => ({ pageIndex, ...quadToBox(q) })) }
@@ -652,6 +671,12 @@ export function resizePages(
       const ty = (tH - H * s) / 2 - lly * s
 
       const obj = page.getObject()
+      // Remember the very first (pre-resize) size so the UI can show "B4→A4".
+      const had = obj.get('PMOrigW')
+      if (!(had && had.isNumber())) {
+        obj.put('PMOrigW', W)
+        obj.put('PMOrigH', H)
+      }
       const enc = new TextEncoder()
       const wrapped = concatBytes([
         enc.encode(`q ${s} 0 0 ${s} ${tx} ${ty} cm\n`),

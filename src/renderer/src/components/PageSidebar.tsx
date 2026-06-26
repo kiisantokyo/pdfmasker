@@ -15,19 +15,25 @@ const PAPERS: { name: string; w: number; h: number }[] = [
   { name: 'リーガル', w: 216, h: 356 }
 ]
 
-function sizeLabel(widthPt: number, heightPt: number): string {
+/** Paper name only (orientation-agnostic), e.g. "A4" or "210×297mm". */
+function paperName(widthPt: number, heightPt: number): string {
   const wmm = widthPt / PT_PER_MM
   const hmm = heightPt / PT_PER_MM
-  const portrait = hmm >= wmm
   const longSide = Math.max(wmm, hmm)
   const shortSide = Math.min(wmm, hmm)
   const tol = 4
   for (const p of PAPERS) {
     if (Math.abs(longSide - p.h) <= tol && Math.abs(shortSide - p.w) <= tol) {
-      return `${p.name}・${portrait ? '縦' : '横'}`
+      return p.name
     }
   }
-  return `${Math.round(wmm)}×${Math.round(hmm)} mm`
+  return `${Math.round(wmm)}×${Math.round(hmm)}mm`
+}
+
+function sizeLabel(widthPt: number, heightPt: number): string {
+  const portrait = heightPt >= widthPt
+  const name = paperName(widthPt, heightPt)
+  return name.includes('×') ? name : `${name}・${portrait ? '縦' : '横'}`
 }
 
 interface ThumbProps {
@@ -233,6 +239,15 @@ export default function PageSidebar({
                   />
                   <span className="page-num">{p.index + 1}</span>
                   {p.rotation ? <span className="page-rot">{p.rotation}°</span> : null}
+                  {p.origWidth &&
+                  p.origHeight &&
+                  paperName(p.origWidth, p.origHeight) !==
+                    paperName(p.width, p.height) ? (
+                    <span className="page-resize">
+                      {paperName(p.origWidth, p.origHeight)}→
+                      {paperName(p.width, p.height)}
+                    </span>
+                  ) : null}
                   {pending > 0 && <span className="page-badge">{pending}</span>}
                 </div>
                 <Thumb
