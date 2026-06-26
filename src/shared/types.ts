@@ -89,6 +89,8 @@ export const IPC = {
   applyRedactions: 'pdf:applyRedactions',
   wordAt: 'pdf:wordAt',
   selectText: 'pdf:selectText',
+  selectionString: 'pdf:selectionString',
+  highlight: 'pdf:highlight',
   findWord: 'pdf:findWord',
   extractCandidates: 'pdf:extractCandidates',
   countTerms: 'pdf:countTerms',

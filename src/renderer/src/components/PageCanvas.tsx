@@ -16,6 +16,12 @@ interface Props {
     pagePt: { x: number; y: number },
     clientPt: { x: number; y: number }
   ) => void
+  /** A text-mode drag selection — page-space rect + screen pt for menu placement. */
+  onTextSelect: (
+    pageIndex: number,
+    sel: { x0: number; y0: number; x1: number; y1: number },
+    clientPt: { x: number; y: number }
+  ) => void
   /** Ctrl + wheel zoom: receives the desired new zoom (clamping done by parent). */
   onZoomChange: (zoom: number) => void
   /** Bump to force a re-fetch of the rendered page (e.g. after redaction). */
@@ -36,6 +42,7 @@ export default function PageCanvas({
   selectMode,
   onAddRects,
   onWordClick,
+  onTextSelect,
   onZoomChange,
   refreshKey
 }: Props): React.JSX.Element {
@@ -175,15 +182,17 @@ export default function PageCanvas({
         { x: e.clientX, y: e.clientY }
       )
     } else if (selectMode === 'text') {
-      // Authoritative final selection.
-      const rects = await pdfApi.selectText(
+      // Hand the dragged text selection to the menu (redact / search / highlight).
+      onTextSelect(
         pageIndex,
-        drag.x0 / zoom,
-        drag.y0 / zoom,
-        drag.x1 / zoom,
-        drag.y1 / zoom
+        {
+          x0: drag.x0 / zoom,
+          y0: drag.y0 / zoom,
+          x1: drag.x1 / zoom,
+          y1: drag.y1 / zoom
+        },
+        { x: e.clientX, y: e.clientY }
       )
-      if (rects.length) onAddRects(rects)
     } else {
       onAddRects([
         {

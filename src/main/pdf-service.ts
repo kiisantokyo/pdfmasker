@@ -135,7 +135,8 @@ export function renderPage(
   const d = requireDoc()
   const page = d.loadPage(index)
   const matrix = mupdf.Matrix.scale(zoom, zoom)
-  const pix = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false)
+  // showExtras=true so annotations (e.g. yellow highlights) are rendered.
+  const pix = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false, true)
   try {
     return {
       png: pix.asPNG(),
@@ -256,6 +257,72 @@ export function selectText(
   return words
     .filter((w) => w.x0 < hx && w.x1 > lx && w.y0 < hy && w.y1 > ly)
     .map((w) => ({ pageIndex, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1 }))
+}
+
+/**
+ * Text + rects for a drag selection. The returned `text` is meant to be used
+ * verbatim as a search term ("redact all occurrences of what I dragged").
+ */
+export function selectionString(
+  pageIndex: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number
+): { text: string; rects: RedactionRect[] } {
+  const d = requireDoc()
+  const stext = d.loadPage(pageIndex).toStructuredText()
+  const quads = stext.highlight([x0, y0], [x1, y1], 500)
+  if (quads.length) {
+    const text = stext.copy([x0, y0], [x1, y1]).replace(/\s+/g, ' ').trim()
+    return { text, rects: quads.map((q) => ({ pageIndex, ...quadToBox(q) })) }
+  }
+  const words = ocr?.get(pageIndex)
+  if (words) {
+    const lx = Math.min(x0, x1)
+    const ly = Math.min(y0, y1)
+    const hx = Math.max(x0, x1)
+    const hy = Math.max(y0, y1)
+    const sel = words.filter(
+      (w) => w.x0 < hx && w.x1 > lx && w.y0 < hy && w.y1 > ly
+    )
+    return {
+      text: sel.map((w) => w.text).join(' ').trim(),
+      rects: sel.map((w) => ({ pageIndex, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1 }))
+    }
+  }
+  return { text: '', rects: [] }
+}
+
+/** Apply a light highlight (default yellow) annotation over each rect. */
+export function highlightRects(rects: RedactionRect[]): DocumentInfo {
+  const d = requireDoc()
+  if (rects.length === 0) return getInfo()
+  const byPage = new Map<number, RedactionRect[]>()
+  for (const r of rects) {
+    const list = byPage.get(r.pageIndex) ?? []
+    list.push(r)
+    byPage.set(r.pageIndex, list)
+  }
+  operation('黄色マーカー', () => {
+    for (const [pageIndex, prs] of byPage) {
+      const page = d.loadPage(pageIndex)
+      for (const r of prs) {
+        const x0 = Math.min(r.x0, r.x1)
+        const y0 = Math.min(r.y0, r.y1)
+        const x1 = Math.max(r.x0, r.x1)
+        const y1 = Math.max(r.y0, r.y1)
+        const annot = page.createAnnotation('Highlight')
+        annot.setColor([1, 1, 0])
+        annot.setOpacity(0.4)
+        annot.setQuadPoints([
+          [x0, y0, x1, y0, x0, y1, x1, y1] as unknown as mupdf.Quad
+        ])
+        annot.update()
+      }
+    }
+  })
+  return getInfo()
 }
 
 /** Find every occurrence of `needle` across all pages (case-insensitive). */

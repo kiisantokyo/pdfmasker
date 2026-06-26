@@ -85,6 +85,16 @@ function registerIpc(): void {
       pdf.selectText(pageIndex, x0, y0, x1, y1)
   )
 
+  ipcMain.handle(
+    IPC.selectionString,
+    (_e, pageIndex: number, x0: number, y0: number, x1: number, y1: number) =>
+      pdf.selectionString(pageIndex, x0, y0, x1, y1)
+  )
+
+  ipcMain.handle(IPC.highlight, (_e, rects: RedactionRect[]) =>
+    pdf.highlightRects(rects)
+  )
+
   ipcMain.handle(IPC.findWord, (_e, needle: string) => pdf.findWord(needle))
 
   ipcMain.handle(IPC.extractCandidates, () => pdf.extractCandidates())

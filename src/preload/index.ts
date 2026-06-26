@@ -43,6 +43,16 @@ const api = {
     y1: number
   ): Promise<RedactionRect[]> =>
     ipcRenderer.invoke(IPC.selectText, pageIndex, x0, y0, x1, y1),
+  selectionString: (
+    pageIndex: number,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number
+  ): Promise<{ text: string; rects: RedactionRect[] }> =>
+    ipcRenderer.invoke(IPC.selectionString, pageIndex, x0, y0, x1, y1),
+  highlight: (rects: RedactionRect[]): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.highlight, rects),
   findWord: (needle: string): Promise<RedactionRect[]> =>
     ipcRenderer.invoke(IPC.findWord, needle),
   extractCandidates: (): Promise<TermCount[]> =>
