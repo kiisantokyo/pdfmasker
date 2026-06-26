@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   BindingSide,
   DocumentInfo,
@@ -62,14 +62,57 @@ export default function App(): React.JSX.Element {
     []
   )
 
-  const applyOpened = useCallback((info: DocumentInfo) => {
-    setDoc(info)
-    setCurrentPage(0)
-    setPending([])
-    setDirty(false)
-    setRefreshKey((k) => k + 1)
-    setStatus(`「${info.name}」を開きました（${info.pageCount} ページ）。`)
+  // --- Unified undo/redo -------------------------------------------------
+  // Each entry snapshots the pending marks before/after an action. Document
+  // mutations (isDoc) are additionally reverted via the mupdf journal, whose
+  // LIFO order stays in sync with the isDoc entries in these stacks.
+  type Hist = { isDoc: boolean; before: RedactionRect[]; after: RedactionRect[] }
+  const undoStack = useRef<Hist[]>([])
+  const redoStack = useRef<Hist[]>([])
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+
+  const syncHist = useCallback(() => {
+    setCanUndo(undoStack.current.length > 0)
+    setCanRedo(redoStack.current.length > 0)
   }, [])
+
+  const resetHist = useCallback(() => {
+    undoStack.current = []
+    redoStack.current = []
+    syncHist()
+  }, [syncHist])
+
+  const pushHist = useCallback(
+    (isDoc: boolean, before: RedactionRect[], after: RedactionRect[]) => {
+      undoStack.current.push({ isDoc, before, after })
+      redoStack.current = []
+      syncHist()
+    },
+    [syncHist]
+  )
+
+  /** Change pending marks as one undoable step. */
+  const commitMarks = useCallback(
+    (next: RedactionRect[]) => {
+      pushHist(false, pending, next)
+      setPending(next)
+    },
+    [pending, pushHist]
+  )
+
+  const applyOpened = useCallback(
+    (info: DocumentInfo) => {
+      setDoc(info)
+      setCurrentPage(0)
+      setPending([])
+      setDirty(false)
+      setRefreshKey((k) => k + 1)
+      resetHist()
+      setStatus(`「${info.name}」を開きました（${info.pageCount} ページ）。`)
+    },
+    [resetHist]
+  )
 
   const open = (): Promise<void> =>
     run(async () => {
@@ -91,6 +134,7 @@ export default function App(): React.JSX.Element {
     run(async () => {
       if (pending.length === 0) return
       const info = await pdfApi.applyRedactions(pending)
+      pushHist(true, pending, [])
       setDoc(info)
       const removed = pending.length
       setPending([])
@@ -103,8 +147,10 @@ export default function App(): React.JSX.Element {
     run(async () => {
       if (!doc) return
       const info = await pdfApi.rotatePage(currentPage, 90)
+      const next = pending.filter((r) => r.pageIndex !== currentPage)
+      pushHist(true, pending, next)
       setDoc(info)
-      setPending((p) => p.filter((r) => r.pageIndex !== currentPage))
+      setPending(next)
       setDirty(true)
       setRefreshKey((k) => k + 1)
       setStatus(`ページ ${currentPage + 1} を回転しました。`)
@@ -119,6 +165,7 @@ export default function App(): React.JSX.Element {
         allPages: bindAll,
         pageIndex: currentPage
       })
+      pushHist(true, pending, [])
       setDoc(info)
       setPending([])
       setDirty(true)
@@ -134,6 +181,7 @@ export default function App(): React.JSX.Element {
     run(async () => {
       if (!doc) return
       const info = await pdfApi.deletePage(currentPage)
+      pushHist(true, pending, [])
       setDoc(info)
       setPending([])
       setCurrentPage((c) => Math.min(c, info.pageCount - 1))
@@ -148,6 +196,7 @@ export default function App(): React.JSX.Element {
       const to = currentPage + dir
       if (to < 0 || to >= doc.pageCount) return
       const info = await pdfApi.movePage(currentPage, to)
+      pushHist(true, pending, [])
       setDoc(info)
       setPending([])
       setCurrentPage(to)
@@ -195,7 +244,7 @@ export default function App(): React.JSX.Element {
 
   const redactWordOnce = (): void => {
     if (!wordMenu) return
-    setPending((p) => [...p, wordMenu.rect])
+    commitMarks([...pending, wordMenu.rect])
     setStatus(`「${wordMenu.word}」を1箇所マークしました。`)
     setWordMenu(null)
   }
@@ -205,10 +254,70 @@ export default function App(): React.JSX.Element {
       if (!wordMenu) return
       const { word } = wordMenu
       const rects = await pdfApi.findWord(word)
-      setPending((p) => [...p, ...rects])
+      commitMarks([...pending, ...rects])
       setStatus(`「${word}」を文書内 ${rects.length} 箇所マークしました。`)
       setWordMenu(null)
     }, '単語の一括選択')
+
+  const doUndo = useCallback(
+    (): Promise<void> =>
+      run(async () => {
+        const entry = undoStack.current.pop()
+        if (!entry) return
+        if (entry.isDoc) {
+          const info = await pdfApi.undo()
+          setDoc(info)
+          setCurrentPage((c) => Math.min(c, info.pageCount - 1))
+          setRefreshKey((k) => k + 1)
+          setDirty(await pdfApi.hasUnsavedChanges())
+        }
+        setPending(entry.before)
+        redoStack.current.push(entry)
+        syncHist()
+        setStatus('元に戻しました。')
+      }, '元に戻す'),
+    [run, syncHist]
+  )
+
+  const doRedo = useCallback(
+    (): Promise<void> =>
+      run(async () => {
+        const entry = redoStack.current.pop()
+        if (!entry) return
+        if (entry.isDoc) {
+          const info = await pdfApi.redo()
+          setDoc(info)
+          setCurrentPage((c) => Math.min(c, info.pageCount - 1))
+          setRefreshKey((k) => k + 1)
+          setDirty(await pdfApi.hasUnsavedChanges())
+        }
+        setPending(entry.after)
+        undoStack.current.push(entry)
+        syncHist()
+        setStatus('やり直しました。')
+      }, 'やり直す'),
+    [run, syncHist]
+  )
+
+  // Ctrl+Z / Ctrl+Y (and Ctrl+Shift+Z) for undo/redo.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const key = e.key.toLowerCase()
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        void doUndo()
+      } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        e.preventDefault()
+        void doRedo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [doUndo, doRedo])
 
   const onDragOver = (e: React.DragEvent): void => {
     if (Array.from(e.dataTransfer.types).includes('Files')) {
@@ -279,7 +388,7 @@ export default function App(): React.JSX.Element {
         <RedactByTermsModal
           onClose={() => setTermsOpen(false)}
           onAddRects={(rects, summary) => {
-            setPending((p) => [...p, ...rects])
+            commitMarks([...pending, ...rects])
             setStatus(summary)
           }}
         />
@@ -373,7 +482,11 @@ export default function App(): React.JSX.Element {
         }
         onOpen={open}
         onApplyRedactions={applyRedactions}
-        onClearPending={() => setPending([])}
+        onClearPending={() => commitMarks([])}
+        onUndo={doUndo}
+        onRedo={doRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
         onRedactByTerms={() => setTermsOpen(true)}
         onRotate={rotate}
         onBindingMargin={() => setBindingOpen(true)}
@@ -403,7 +516,7 @@ export default function App(): React.JSX.Element {
               pendingRects={pendingForPage}
               selectMode={selectMode}
               refreshKey={refreshKey}
-              onAddRects={(rs) => setPending((p) => [...p, ...rs])}
+              onAddRects={(rs) => commitMarks([...pending, ...rs])}
               onWordClick={onWordClick}
               onZoomChange={clampZoom}
             />

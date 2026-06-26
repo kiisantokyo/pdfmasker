@@ -58,6 +58,8 @@ const api = {
     ipcRenderer.invoke(IPC.rotatePage, index, delta),
   bindingMargin: (opts: BindingMarginOptions): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.bindingMargin, opts),
+  undo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.undo),
+  redo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.redo),
   save: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.save),
   saveAs: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.saveAs),
   hasUnsavedChanges: (): Promise<boolean> =>

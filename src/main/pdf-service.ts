@@ -21,6 +21,32 @@ function requireDoc(): mupdf.PDFDocument {
   return doc
 }
 
+/** Wrap a mutation as a single journal operation so it undoes/redoes atomically. */
+function operation<T>(name: string, fn: () => T): T {
+  const d = requireDoc()
+  d.beginOperation(name)
+  try {
+    const result = fn()
+    d.endOperation()
+    return result
+  } catch (err) {
+    d.abandonOperation()
+    throw err
+  }
+}
+
+export function undo(): DocumentInfo {
+  const d = requireDoc()
+  if (d.canUndo()) d.undo()
+  return getInfo()
+}
+
+export function redo(): DocumentInfo {
+  const d = requireDoc()
+  if (d.canRedo()) d.redo()
+  return getInfo()
+}
+
 function readRotation(page: mupdf.PDFPage): number {
   const obj = page.getObject()
   const rot = obj.getInheritable('Rotate')
@@ -78,6 +104,8 @@ export function loadDocument(
   doc = pdf
   currentName = name
   currentPath = path
+  // Enable the journal so every mutation can be undone/redone.
+  pdf.enableJournal()
   return getInfo()
 }
 
@@ -119,25 +147,24 @@ export function applyRedactions(rects: RedactionRect[]): void {
     byPage.set(r.pageIndex, list)
   }
 
-  for (const [pageIndex, pageRects] of byPage) {
-    const page = d.loadPage(pageIndex)
-    for (const r of pageRects) {
-      const annot = page.createAnnotation('Redact')
-      annot.setRect([
-        Math.min(r.x0, r.x1),
-        Math.min(r.y0, r.y1),
-        Math.max(r.x0, r.x1),
-        Math.max(r.y0, r.y1)
-      ])
-      annot.update()
+  operation('墨消しの適用', () => {
+    for (const [pageIndex, pageRects] of byPage) {
+      const page = d.loadPage(pageIndex)
+      for (const r of pageRects) {
+        const annot = page.createAnnotation('Redact')
+        annot.setRect([
+          Math.min(r.x0, r.x1),
+          Math.min(r.y0, r.y1),
+          Math.max(r.x0, r.x1),
+          Math.max(r.y0, r.y1)
+        ])
+        annot.update()
+      }
+      // black_boxes=true draws a black fill where content was removed;
+      // REDACT_IMAGE_REMOVE strips covered images entirely.
+      page.applyRedactions(true, mupdf.PDFPage.REDACT_IMAGE_REMOVE)
     }
-    // black_boxes=true draws a black fill where content was removed;
-    // REDACT_IMAGE_REMOVE strips covered images entirely.
-    page.applyRedactions(
-      true,
-      mupdf.PDFPage.REDACT_IMAGE_REMOVE
-    )
-  }
+  })
 }
 
 /** Convert a mupdf Quad ([ulx,uly, urx,ury, llx,lly, lrx,lry]) to a bbox. */
@@ -308,7 +335,7 @@ export function deletePage(index: number): DocumentInfo {
   if (d.countPages() <= 1) {
     throw new Error('Cannot delete the only page')
   }
-  d.deletePage(index)
+  operation('ページ削除', () => d.deletePage(index))
   return getInfo()
 }
 
@@ -322,7 +349,7 @@ export function movePage(from: number, to: number): DocumentInfo {
   const order = Array.from({ length: count }, (_, i) => i)
   const [moved] = order.splice(from, 1)
   order.splice(to, 0, moved)
-  d.rearrangePages(order)
+  operation('ページ移動', () => d.rearrangePages(order))
   return getInfo()
 }
 
@@ -332,7 +359,7 @@ export function rotatePage(index: number, delta: RotateDelta): DocumentInfo {
   const obj = page.getObject()
   const current = readRotation(page)
   const next = (((current + delta) % 360) + 360) % 360
-  obj.put('Rotate', next)
+  operation('ページ回転', () => obj.put('Rotate', next))
   return getInfo()
 }
 
@@ -390,38 +417,40 @@ export function addBindingMargin(opts: BindingMarginOptions): DocumentInfo {
     ? Array.from({ length: d.countPages() }, (_, i) => i)
     : [opts.pageIndex]
 
-  for (const i of targets) {
-    const page = d.loadPage(i)
-    const [llx, lly, urx, ury] = mediaBox(page)
-    const W = urx - llx
-    const H = ury - lly
-    if (W <= 0 || H <= 0) continue
+  operation('閉じ代の確保', () => {
+    for (const i of targets) {
+      const page = d.loadPage(i)
+      const [llx, lly, urx, ury] = mediaBox(page)
+      const W = urx - llx
+      const H = ury - lly
+      if (W <= 0 || H <= 0) continue
 
-    const horizontal = opts.side === 'left' || opts.side === 'right'
-    const s = horizontal ? (W - m) / W : (H - m) / H
-    if (s <= 0 || s >= 1) continue
+      const horizontal = opts.side === 'left' || opts.side === 'right'
+      const s = horizontal ? (W - m) / W : (H - m) / H
+      if (s <= 0 || s >= 1) continue
 
-    let tx = llx * (1 - s)
-    let ty = lly * (1 - s)
-    if (horizontal) {
-      // Centre vertically; push away from the binding edge horizontally.
-      ty += (H - H * s) / 2
-      tx += opts.side === 'left' ? m : 0
-    } else {
-      // Centre horizontally; push away from the binding edge vertically.
-      tx += (W - W * s) / 2
-      ty += opts.side === 'bottom' ? m : 0
+      let tx = llx * (1 - s)
+      let ty = lly * (1 - s)
+      if (horizontal) {
+        // Centre vertically; push away from the binding edge horizontally.
+        ty += (H - H * s) / 2
+        tx += opts.side === 'left' ? m : 0
+      } else {
+        // Centre horizontally; push away from the binding edge vertically.
+        tx += (W - W * s) / 2
+        ty += opts.side === 'bottom' ? m : 0
+      }
+
+      const enc = new TextEncoder()
+      const prefix = enc.encode(`q ${s} 0 0 ${s} ${tx} ${ty} cm\n`)
+      const suffix = enc.encode('\nQ\n')
+      const original = readPageContents(page.getObject())
+      const wrapped = concatBytes([prefix, original, suffix])
+
+      const stream = d.addStream(wrapped, {})
+      page.getObject().put('Contents', stream)
     }
-
-    const enc = new TextEncoder()
-    const prefix = enc.encode(`q ${s} 0 0 ${s} ${tx} ${ty} cm\n`)
-    const suffix = enc.encode('\nQ\n')
-    const original = readPageContents(page.getObject())
-    const wrapped = concatBytes([prefix, original, suffix])
-
-    const stream = d.addStream(wrapped, {})
-    page.getObject().put('Contents', stream)
-  }
+  })
 
   return getInfo()
 }
