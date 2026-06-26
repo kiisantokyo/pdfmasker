@@ -40,14 +40,23 @@ interface ThumbProps {
   index: number
   widthPt: number
   heightPt: number
+  rotation: number
   refreshKey: number
 }
 
 /** Lazily renders a small page image when scrolled into view. */
-function Thumb({ index, widthPt, heightPt, refreshKey }: ThumbProps): React.JSX.Element {
+function Thumb({
+  index,
+  widthPt,
+  heightPt,
+  rotation,
+  refreshKey
+}: ThumbProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const urlRef = useRef<string | null>(null)
   const [url, setUrl] = useState<string | null>(null)
+  // Actual rendered pixel size — reflects rotation, so the frame matches.
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -63,6 +72,7 @@ function Thumb({ index, widthPt, heightPt, refreshKey }: ThumbProps): React.JSX.
       if (urlRef.current) URL.revokeObjectURL(urlRef.current)
       urlRef.current = next
       setUrl(next)
+      setDims({ w: res.pixelWidth, h: res.pixelHeight })
     }
 
     const observer = new IntersectionObserver(
@@ -89,7 +99,16 @@ function Thumb({ index, widthPt, heightPt, refreshKey }: ThumbProps): React.JSX.
     []
   )
 
-  const aspect = heightPt > 0 ? widthPt / heightPt : 0.707
+  // Prefer the rendered image's real aspect; before it loads, estimate from the
+  // page size, swapping w/h for 90°/270° rotations so the frame doesn't jump.
+  const swapped = rotation % 180 !== 0
+  const estW = swapped ? heightPt : widthPt
+  const estH = swapped ? widthPt : heightPt
+  const aspect = dims
+    ? dims.w / dims.h
+    : estH > 0
+      ? estW / estH
+      : 0.707
   return (
     <div className="thumb-img" ref={ref} style={{ aspectRatio: String(aspect) }}>
       {url ? <img src={url} alt={`page ${index + 1}`} /> : null}
@@ -254,6 +273,7 @@ export default function PageSidebar({
                   index={p.index}
                   widthPt={p.width}
                   heightPt={p.height}
+                  rotation={p.rotation}
                   refreshKey={refreshKey}
                 />
                 <span className="page-dims">{sizeLabel(p.width, p.height)}</span>

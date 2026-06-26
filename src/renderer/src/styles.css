@@ -275,7 +275,8 @@ body {
 .thumb-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px 6px;
 }
 .thumb-top input {
   accent-color: var(--accent);
