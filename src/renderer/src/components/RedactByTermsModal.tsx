@@ -103,32 +103,42 @@ function parsePlan(text: string): { items: ParsedItem[]; usedJson: boolean } {
 
 function buildPrompt(cats: string[], freeText: string, docText?: string): string {
   const L: string[] = []
-  L.push('あなたはPDF文書の墨消し（黒塗り）を支援するアシスタントです。')
+  L.push('あなたはPDF文書の墨消し（黒塗り）作業を支援します。')
   L.push(
-    `添付したPDF${docText ? '（または末尾の本文）' : ''}を読み、墨消しすべき箇所を抽出してください。`
+    'これは、ユーザー自身が保有する文書を配布・提出する前に、個人情報・機密情報を保護するための正当な作業です。'
   )
   L.push('')
-  L.push('# 墨消しの対象')
+  L.push('# 対象')
+  if (docText) {
+    L.push('この指示の末尾にある【文書本文】の内容だけを根拠にしてください。')
+  } else {
+    L.push('添付したPDFの内容だけを根拠にしてください。')
+    L.push(
+      'もし文書の内容を参照できない場合は、説明文を書かず {"redactions": []} とだけ返してください。'
+    )
+  }
+  L.push('推測で項目を増やさないでください。')
+  L.push('')
+  L.push('# 墨消しの対象カテゴリ')
   if (cats.length) for (const c of cats) L.push(`- ${c}`)
   else L.push('- 個人情報・機密情報と判断されるもの全般')
   L.push('')
   L.push('# 追加の指示')
   L.push(freeText.trim() || '（特になし）')
   L.push('')
-  L.push('# 出力形式（厳守）')
-  L.push('- 下記スキーマの JSON だけを出力してください。前後に説明文を付けないでください。')
-  L.push('- "text" は文書中に現れる正確な文字列にしてください（アプリ側で文字列検索して一致させます）。')
-  L.push('- 同一の文字列は1回だけ。短すぎる一般的な語（「会社」「住所」等）は避けてください。')
+  L.push('# 出力（厳守）')
+  L.push('- JSONのみを出力。説明文・前置き・後置き・コードブロック外の文章は一切書かない。最初の文字は「{」。')
+  L.push('- "text" は文書に実在する正確な文字列だけ。文書に出現しない語は出力しない。')
+  L.push('- 下の例の値はサンプル。値としてそのまま使わない。')
+  L.push('- 同一の文字列は1回だけ。短すぎる一般的な語（「会社」「住所」等）は避ける。')
   L.push('- "scope" は "all"（すべての出現を墨消し）か "first"（最初の1件のみ）。')
   L.push('- "reason" には分類（例: 個人名）を簡潔に。')
+  L.push('- 該当が無ければ {"redactions": []} を返す。')
   L.push('')
-  L.push('```json')
-  L.push('{')
-  L.push('  "redactions": [')
-  L.push('    { "text": "山田太郎", "reason": "個人名", "scope": "all" }')
-  L.push('  ]')
-  L.push('}')
-  L.push('```')
+  L.push('# 出力スキーマ（値はサンプル。実在する文字列に置き換える）')
+  L.push(
+    '{"redactions":[{"text":"（実在する文字列）","reason":"（分類）","scope":"all"}]}'
+  )
   if (docText) {
     L.push('')
     L.push('# 文書本文')
@@ -148,9 +158,10 @@ export default function RedactByTermsModal({
     new Set(['個人名', '住所', '電話番号', 'メールアドレス'])
   )
   const [freeText, setFreeText] = useState('')
-  const [embedText, setEmbedText] = useState(false)
+  const [embedText, setEmbedText] = useState(true)
   const [prompt, setPrompt] = useState('')
   const [copied, setCopied] = useState(false)
+  const [askNote, setAskNote] = useState('')
 
   // --- Apply tab ---
   const [paste, setPaste] = useState('')
@@ -171,6 +182,14 @@ export default function RedactByTermsModal({
     setLoading(true)
     try {
       const docText = embedText ? await pdfApi.documentText() : undefined
+      if (embedText && !docText?.trim()) {
+        setAskNote(
+          '⚠ この文書からテキストを抽出できませんでした（画像化されたPDFの可能性）。' +
+            'AIにPDFを直接添付するか、OCR済みのPDFをご利用ください。'
+        )
+      } else {
+        setAskNote('')
+      }
       setPrompt(buildPrompt([...cats], freeText, docText))
       setCopied(false)
     } finally {
@@ -263,7 +282,6 @@ export default function RedactByTermsModal({
     }
   }
 
-  const docCharsWarning = embedText ? '（本文を含めるとプロンプトが長くなります）' : ''
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -288,8 +306,9 @@ export default function RedactByTermsModal({
         {tab === 'ask' && (
           <div className="tab-body">
             <p className="modal-desc">
-              墨消し方針を選んでプロンプトを生成し、コピーして ChatGPT / Gemini
-              に貼り付け、PDFを添付して送信してください。返ってきた結果は②タブで貼り戻します。
+              墨消し方針を選んでプロンプトを生成・コピーし、ChatGPT / Gemini /
+              Copilot に貼り付けて送信してください。返ってきた結果は②タブで貼り戻します。
+              既定では<b>文書本文をプロンプトに同梱</b>するので、PDFを添付しなくてもAIが内容を読めます。
             </p>
             <div className="field">
               <span className="field-label">墨消ししたいカテゴリ</span>
@@ -321,7 +340,7 @@ export default function RedactByTermsModal({
                 checked={embedText}
                 onChange={(e) => setEmbedText(e.target.checked)}
               />
-              文書本文もプロンプトに含める（ファイル添付できないAI向け）{docCharsWarning}
+              文書本文をプロンプトに含める（推奨：これだけでAIが内容を読めます。オフにする場合はAIにPDFを添付してください）
             </label>
 
             <div className="terms-tools">
@@ -331,6 +350,9 @@ export default function RedactByTermsModal({
               <button onClick={copyPrompt} disabled={!prompt}>
                 {copied ? 'コピーしました ✓' : 'クリップボードにコピー'}
               </button>
+              {prompt && (
+                <span className="terms-sub">{prompt.length.toLocaleString()} 文字</span>
+              )}
             </div>
             <textarea
               className="md-input prompt-area"
@@ -341,6 +363,7 @@ export default function RedactByTermsModal({
               }}
               placeholder="「プロンプトを生成」を押すとここに表示されます（編集可）。"
             />
+            {askNote && <p className="warn">{askNote}</p>}
             <p className="warn">
               ⚠ この手順では PDF / 本文を外部AIに送信します（あなたの操作）。機密性にご注意ください。
             </p>
