@@ -117,14 +117,19 @@ export default function Toolbar(props: Props): React.JSX.Element {
       <button onClick={props.onRotateRight} disabled={d} title="現在のページを右に90°回転">
         ↻ 右
       </button>
-      <button onClick={props.onMoveUp} disabled={d}>
-        ◀ 前へ
+      <button onClick={props.onMoveUp} disabled={d} title="現在のページを前へ移動">
+        ◀ 前
       </button>
-      <button onClick={props.onMoveDown} disabled={d}>
-        後へ ▶
+      <button onClick={props.onMoveDown} disabled={d} title="現在のページを後へ移動">
+        後 ▶
       </button>
-      <button className="danger" onClick={props.onDeletePage} disabled={d}>
-        ページ削除
+      <button
+        className="danger"
+        onClick={props.onDeletePage}
+        disabled={d}
+        title="現在のページを削除"
+      >
+        🗑
       </button>
 
       <span className="sep" />

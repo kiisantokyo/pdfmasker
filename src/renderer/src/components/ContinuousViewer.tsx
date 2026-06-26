@@ -17,6 +17,7 @@ interface Props {
     pagePt: { x: number; y: number },
     clientPt: { x: number; y: number }
   ) => void
+  onCtrlClick: (pageIndex: number, pagePt: { x: number; y: number }) => void
   onTextSelect: (
     pageIndex: number,
     sel: { x0: number; y0: number; x1: number; y1: number },
@@ -35,6 +36,7 @@ export default function ContinuousViewer({
   onVisiblePage,
   onAddRects,
   onWordClick,
+  onCtrlClick,
   onTextSelect,
   onZoomChange
 }: Props): React.JSX.Element {
@@ -107,6 +109,7 @@ export default function ContinuousViewer({
                 refreshKey={refreshKey}
                 onAddRects={onAddRects}
                 onWordClick={onWordClick}
+                onCtrlClick={onCtrlClick}
                 onTextSelect={onTextSelect}
                 onZoomChange={onZoomChange}
               />

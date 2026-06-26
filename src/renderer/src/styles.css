@@ -217,7 +217,14 @@ body {
 .page-list {
   list-style: none;
   margin: 0;
-  padding: 0 8px 8px;
+  padding: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-content: flex-start;
+}
+.page-list li {
+  width: 132px;
 }
 .page-item {
   width: 100%;
