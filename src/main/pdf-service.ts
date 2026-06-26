@@ -235,6 +235,47 @@ function ocrWordAt(pageIndex: number, x: number, y: number): WordHit | null {
 }
 
 /**
+ * OCR selection: take the words intersecting a region and merge them into ONE
+ * rectangle per text line (so a drag becomes a clean bar instead of a row of
+ * disconnected per-word boxes — the "tofu" problem).
+ */
+function ocrSelectionRects(
+  pageIndex: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number
+): { text: string; rects: RedactionRect[] } {
+  const words = ocr?.get(pageIndex)
+  if (!words) return { text: '', rects: [] }
+  const lx = Math.min(x0, x1)
+  const ly = Math.min(y0, y1)
+  const hx = Math.max(x0, x1)
+  const hy = Math.max(y0, y1)
+  const sel = words
+    .filter((w) => w.x0 < hx && w.x1 > lx && w.y0 < hy && w.y1 > ly)
+    .sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)
+  const lines: { x0: number; y0: number; x1: number; y1: number; text: string }[] = []
+  for (const w of sel) {
+    const last = lines[lines.length - 1]
+    // Same line if this word vertically overlaps the current line band.
+    if (last && w.y0 < last.y1) {
+      last.x0 = Math.min(last.x0, w.x0)
+      last.y0 = Math.min(last.y0, w.y0)
+      last.x1 = Math.max(last.x1, w.x1)
+      last.y1 = Math.max(last.y1, w.y1)
+      last.text += w.text
+    } else {
+      lines.push({ x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1, text: w.text })
+    }
+  }
+  return {
+    text: lines.map((l) => l.text).join(' ').replace(/\s+/g, ' ').trim(),
+    rects: lines.map((l) => ({ pageIndex, x0: l.x0, y0: l.y0, x1: l.x1, y1: l.y1 }))
+  }
+}
+
+/**
  * Text-selection sweep: returns the quads tracing the text between two points
  * (page-space), so the user can "drag over" words instead of boxing them.
  */
@@ -249,16 +290,9 @@ export function selectText(
   const stext = d.loadPage(pageIndex).toStructuredText()
   const quads = stext.highlight([x0, y0], [x1, y1], 500)
   if (quads.length) return quads.map((q) => ({ pageIndex, ...quadToBox(q) }))
-  // Fallback: OCR words intersecting the dragged region (scanned PDFs).
-  const words = ocr?.get(pageIndex)
-  if (!words) return []
-  const lx = Math.min(x0, x1)
-  const ly = Math.min(y0, y1)
-  const hx = Math.max(x0, x1)
-  const hy = Math.max(y0, y1)
-  return words
-    .filter((w) => w.x0 < hx && w.x1 > lx && w.y0 < hy && w.y1 > ly)
-    .map((w) => ({ pageIndex, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1 }))
+  // Fallback: OCR words intersecting the dragged region (scanned PDFs),
+  // merged into one rectangle per line.
+  return ocrSelectionRects(pageIndex, x0, y0, x1, y1).rects
 }
 
 /**
@@ -279,21 +313,7 @@ export function selectionString(
     const text = stext.copy([x0, y0], [x1, y1]).replace(/\s+/g, ' ').trim()
     return { text, rects: quads.map((q) => ({ pageIndex, ...quadToBox(q) })) }
   }
-  const words = ocr?.get(pageIndex)
-  if (words) {
-    const lx = Math.min(x0, x1)
-    const ly = Math.min(y0, y1)
-    const hx = Math.max(x0, x1)
-    const hy = Math.max(y0, y1)
-    const sel = words.filter(
-      (w) => w.x0 < hx && w.x1 > lx && w.y0 < hy && w.y1 > ly
-    )
-    return {
-      text: sel.map((w) => w.text).join(' ').trim(),
-      rects: sel.map((w) => ({ pageIndex, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1 }))
-    }
-  }
-  return { text: '', rects: [] }
+  return ocrSelectionRects(pageIndex, x0, y0, x1, y1)
 }
 
 /** Apply a light, rectangular yellow highlight over each rect. */
