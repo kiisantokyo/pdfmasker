@@ -101,6 +101,16 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.deletePage, (_e, index: number) => pdf.deletePage(index))
 
+  ipcMain.handle(IPC.deletePages, (_e, indices: number[]) =>
+    pdf.deletePages(indices)
+  )
+
+  ipcMain.handle(
+    IPC.rotatePages,
+    (_e, indices: number[], delta: RotateDelta) =>
+      pdf.rotatePages(indices, delta)
+  )
+
   ipcMain.handle(
     IPC.movePage,
     (_e, from: number, to: number) => pdf.movePage(from, to)

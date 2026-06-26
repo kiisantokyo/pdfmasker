@@ -1,8 +1,9 @@
-import type { DocumentInfo } from '@shared/types'
+import { useEffect, useRef, useState } from 'react'
+import type { DocumentInfo, RotateDelta } from '@shared/types'
+import { pdfApi } from '../lib/api'
 
 const PT_PER_MM = 72 / 25.4
 
-// Standard paper sizes in mm (portrait). Matched in either orientation.
 const PAPERS: { name: string; w: number; h: number }[] = [
   { name: 'A3', w: 297, h: 420 },
   { name: 'A4', w: 210, h: 297 },
@@ -14,14 +15,13 @@ const PAPERS: { name: string; w: number; h: number }[] = [
   { name: 'リーガル', w: 216, h: 356 }
 ]
 
-/** Human-friendly size label: paper name + orientation, or mm fallback. */
 function sizeLabel(widthPt: number, heightPt: number): string {
   const wmm = widthPt / PT_PER_MM
   const hmm = heightPt / PT_PER_MM
   const portrait = hmm >= wmm
   const longSide = Math.max(wmm, hmm)
   const shortSide = Math.min(wmm, hmm)
-  const tol = 4 // mm
+  const tol = 4
   for (const p of PAPERS) {
     if (Math.abs(longSide - p.h) <= tol && Math.abs(shortSide - p.w) <= tol) {
       return `${p.name}・${portrait ? '縦' : '横'}`
@@ -30,40 +30,205 @@ function sizeLabel(widthPt: number, heightPt: number): string {
   return `${Math.round(wmm)}×${Math.round(hmm)} mm`
 }
 
+interface ThumbProps {
+  index: number
+  widthPt: number
+  heightPt: number
+  refreshKey: number
+}
+
+/** Lazily renders a small page image when scrolled into view. */
+function Thumb({ index, widthPt, heightPt, refreshKey }: ThumbProps): React.JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const urlRef = useRef<string | null>(null)
+  const [url, setUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const el = ref.current
+    if (!el) return
+
+    const render = async (): Promise<void> => {
+      const zoom = Math.min(1.5, 150 / widthPt)
+      const res = await pdfApi.renderPage(index, zoom)
+      if (cancelled) return
+      const blob = new Blob([res.png.slice()], { type: 'image/png' })
+      const next = URL.createObjectURL(blob)
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+      urlRef.current = next
+      setUrl(next)
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          observer.disconnect()
+          void render()
+        }
+      },
+      { rootMargin: '300px' }
+    )
+    observer.observe(el)
+    return () => {
+      cancelled = true
+      observer.disconnect()
+    }
+  }, [index, widthPt, refreshKey])
+
+  // Revoke the blob URL on unmount.
+  useEffect(
+    () => () => {
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+    },
+    []
+  )
+
+  const aspect = heightPt > 0 ? widthPt / heightPt : 0.707
+  return (
+    <div className="thumb-img" ref={ref} style={{ aspectRatio: String(aspect) }}>
+      {url ? <img src={url} alt={`page ${index + 1}`} /> : null}
+    </div>
+  )
+}
+
 interface Props {
   doc: DocumentInfo
   currentPage: number
   pendingCountByPage: Record<number, number>
+  refreshKey: number
   onSelect: (index: number) => void
+  onBulkDelete: (indices: number[]) => void
+  onBulkRotate: (indices: number[], delta: RotateDelta) => void
 }
 
 export default function PageSidebar({
   doc,
   currentPage,
   pendingCountByPage,
-  onSelect
+  refreshKey,
+  onSelect,
+  onBulkDelete,
+  onBulkRotate
 }: Props): React.JSX.Element {
+  const [checked, setChecked] = useState<Set<number>>(new Set())
+  const anchor = useRef<number | null>(null)
+
+  // Selection is position-based, so reset it whenever the page set changes.
+  useEffect(() => {
+    setChecked(new Set())
+    anchor.current = null
+  }, [doc.pageCount, refreshKey])
+
+  const toggle = (index: number): void =>
+    setChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+
+  const checkRange = (from: number, to: number): void => {
+    const lo = Math.min(from, to)
+    const hi = Math.max(from, to)
+    setChecked((prev) => {
+      const next = new Set(prev)
+      for (let i = lo; i <= hi; i++) next.add(i)
+      return next
+    })
+  }
+
+  const onItemClick = (index: number, e: React.MouseEvent): void => {
+    if (e.shiftKey && anchor.current !== null) {
+      checkRange(anchor.current, index)
+    } else if (e.ctrlKey || e.metaKey) {
+      toggle(index)
+      anchor.current = index
+    } else {
+      anchor.current = index
+    }
+    onSelect(index)
+  }
+
+  const selectedList = (): number[] => [...checked].sort((a, b) => a - b)
+  const clear = (): void => {
+    setChecked(new Set())
+    anchor.current = null
+  }
+
+  const allChecked = checked.size === doc.pageCount && doc.pageCount > 0
+
   return (
     <aside className="sidebar">
-      <div className="sidebar-title">ページ ({doc.pageCount})</div>
+      <div className="sidebar-title">
+        <span>ページ ({doc.pageCount})</span>
+        <button
+          className="link-btn"
+          onClick={() =>
+            allChecked
+              ? clear()
+              : setChecked(new Set(doc.pages.map((p) => p.index)))
+          }
+        >
+          {allChecked ? '全解除' : '全選択'}
+        </button>
+      </div>
+
+      {checked.size > 0 && (
+        <div className="bulk-bar">
+          <span>{checked.size} ページ選択</span>
+          <div className="bulk-actions">
+            <button title="左に90°回転" onClick={() => onBulkRotate(selectedList(), -90)}>
+              ↺
+            </button>
+            <button title="右に90°回転" onClick={() => onBulkRotate(selectedList(), 90)}>
+              ↻
+            </button>
+            <button className="danger" title="選択ページを削除" onClick={() => onBulkDelete(selectedList())}>
+              削除
+            </button>
+            <button title="選択を解除" onClick={clear}>
+              解除
+            </button>
+          </div>
+        </div>
+      )}
+
       <ul className="page-list">
         {doc.pages.map((p) => {
           const pending = pendingCountByPage[p.index] ?? 0
+          const isChecked = checked.has(p.index)
           return (
             <li key={p.index}>
-              <button
+              <div
                 className={
-                  'page-item' + (p.index === currentPage ? ' active' : '')
+                  'page-item' +
+                  (p.index === currentPage ? ' active' : '') +
+                  (isChecked ? ' checked' : '')
                 }
-                onClick={() => onSelect(p.index)}
+                onClick={(e) => onItemClick(p.index, e)}
               >
-                <span className="page-num">{p.index + 1}</span>
-                <span className="page-dims">
-                  {sizeLabel(p.width, p.height)}
-                  {p.rotation ? ` · ${p.rotation}°` : ''}
-                </span>
-                {pending > 0 && <span className="page-badge">{pending}</span>}
-              </button>
+                <div className="thumb-top">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => {
+                      toggle(p.index)
+                      anchor.current = p.index
+                    }}
+                  />
+                  <span className="page-num">{p.index + 1}</span>
+                  {p.rotation ? <span className="page-rot">{p.rotation}°</span> : null}
+                  {pending > 0 && <span className="page-badge">{pending}</span>}
+                </div>
+                <Thumb
+                  index={p.index}
+                  widthPt={p.width}
+                  heightPt={p.height}
+                  refreshKey={refreshKey}
+                />
+                <span className="page-dims">{sizeLabel(p.width, p.height)}</span>
+              </div>
             </li>
           )
         })}
