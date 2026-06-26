@@ -138,14 +138,18 @@ export default function PageSidebar({
   }
 
   const onItemClick = (index: number, e: React.MouseEvent): void => {
+    // Modifier-clicks select without navigating, so multi-selection doesn't
+    // make the main view jump around.
     if (e.shiftKey && anchor.current !== null) {
       checkRange(anchor.current, index)
-    } else if (e.ctrlKey || e.metaKey) {
+      return
+    }
+    if (e.ctrlKey || e.metaKey) {
       toggle(index)
       anchor.current = index
-    } else {
-      anchor.current = index
+      return
     }
+    anchor.current = index
     onSelect(index)
   }
 
@@ -205,6 +209,7 @@ export default function PageSidebar({
                   (p.index === currentPage ? ' active' : '') +
                   (isChecked ? ' checked' : '')
                 }
+                title="クリック: 表示 / Ctrl+クリック: 複数選択 / Shift+クリック: 範囲選択"
                 onClick={(e) => onItemClick(p.index, e)}
               >
                 <div className="thumb-top">

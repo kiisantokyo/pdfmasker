@@ -16,7 +16,8 @@ interface Props {
   onApplyRedactions: () => void
   onClearPending: () => void
   onRedactByTerms: () => void
-  onRotate: () => void
+  onRotateLeft: () => void
+  onRotateRight: () => void
   onBindingMargin: () => void
   onDeletePage: () => void
   onMoveUp: () => void
@@ -85,8 +86,11 @@ export default function Toolbar(props: Props): React.JSX.Element {
 
       <span className="sep" />
 
-      <button onClick={props.onRotate} disabled={d}>
-        回転 ⟳
+      <button onClick={props.onRotateLeft} disabled={d} title="現在のページを左に90°回転">
+        ↺ 左回転
+      </button>
+      <button onClick={props.onRotateRight} disabled={d} title="現在のページを右に90°回転">
+        ↻ 右回転
       </button>
       <button onClick={props.onMoveUp} disabled={d}>
         ◀ 前へ

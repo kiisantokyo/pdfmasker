@@ -250,6 +250,9 @@ body {
 .viewer.continuous {
   flex-direction: column;
   align-items: center;
+  /* Must be flex-start: with column + center, overflowing content is pushed
+     above the scroll origin and the first page's top becomes unreachable. */
+  justify-content: flex-start;
   gap: 18px;
 }
 .cv-page {
