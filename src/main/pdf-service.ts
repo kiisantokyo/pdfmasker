@@ -176,9 +176,11 @@ export function applyRedactions(rects: RedactionRect[]): void {
         ])
         annot.update()
       }
-      // black_boxes=true draws a black fill where content was removed;
-      // REDACT_IMAGE_REMOVE strips covered images entirely.
-      page.applyRedactions(true, mupdf.PDFPage.REDACT_IMAGE_REMOVE)
+      // black_boxes=true draws a black fill where content was removed.
+      // REDACT_IMAGE_PIXELS clears only the covered pixels of an image — so a
+      // scanned/full-page-image PDF keeps the rest of the page intact (REMOVE
+      // would delete the whole intersecting image, wiping the page).
+      page.applyRedactions(true, mupdf.PDFPage.REDACT_IMAGE_PIXELS)
     }
   })
 }
@@ -294,7 +296,7 @@ export function selectionString(
   return { text: '', rects: [] }
 }
 
-/** Apply a light highlight (default yellow) annotation over each rect. */
+/** Apply a light, rectangular yellow highlight over each rect. */
 export function highlightRects(rects: RedactionRect[]): DocumentInfo {
   const d = requireDoc()
   if (rects.length === 0) return getInfo()
@@ -312,12 +314,14 @@ export function highlightRects(rects: RedactionRect[]): DocumentInfo {
         const y0 = Math.min(r.y0, r.y1)
         const x1 = Math.max(r.x0, r.x1)
         const y1 = Math.max(r.y0, r.y1)
-        const annot = page.createAnnotation('Highlight')
+        // A 'Square' annotation with a yellow interior fill gives a clean
+        // rectangle; 'Highlight' would render with rounded ends (oval-looking).
+        const annot = page.createAnnotation('Square')
+        annot.setRect([x0, y0, x1, y1])
+        annot.setInteriorColor([1, 1, 0])
         annot.setColor([1, 1, 0])
+        annot.setBorderWidth(0)
         annot.setOpacity(0.4)
-        annot.setQuadPoints([
-          [x0, y0, x1, y0, x0, y1, x1, y1] as unknown as mupdf.Quad
-        ])
         annot.update()
       }
     }

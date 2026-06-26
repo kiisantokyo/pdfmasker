@@ -40,7 +40,8 @@ export default function App(): React.JSX.Element {
     const startX = e.clientX
     const startW = sidebarW
     const onMove = (ev: PointerEvent): void => {
-      setSidebarW(Math.max(150, Math.min(560, startW + (ev.clientX - startX))))
+      const max = Math.round(window.innerWidth * 0.7)
+      setSidebarW(Math.max(150, Math.min(max, startW + (ev.clientX - startX))))
     }
     const onUp = (): void => {
       window.removeEventListener('pointermove', onMove)

@@ -34,5 +34,22 @@
     "electron-vite": "^5.0.0",
     "typescript": "^6.0.3",
     "vite": "^7.3.5"
+  },
+  "build": {
+    "appId": "jp.cosmo-law.pdfmasker",
+    "productName": "究極の墨消し",
+    "asar": false,
+    "compression": "store",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "pdfmasker-${version}-portable.exe"
+    }
   }
 }
