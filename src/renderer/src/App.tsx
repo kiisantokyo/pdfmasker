@@ -130,11 +130,20 @@ export default function App(): React.JSX.Element {
     [syncHist]
   )
 
-  /** Change pending marks as one undoable step. */
+  /** Change pending marks as one undoable step (deduping overlapping rects). */
   const commitMarks = useCallback(
     (next: RedactionRect[]) => {
-      pushHist(false, pending, next)
-      setPending(next)
+      const seen = new Set<string>()
+      const deduped: RedactionRect[] = []
+      for (const r of next) {
+        const key = `${r.pageIndex}:${Math.round(r.x0)}:${Math.round(r.y0)}:${Math.round(r.x1)}:${Math.round(r.y1)}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          deduped.push(r)
+        }
+      }
+      pushHist(false, pending, deduped)
+      setPending(deduped)
     },
     [pending, pushHist]
   )

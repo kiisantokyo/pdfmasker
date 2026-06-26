@@ -112,10 +112,10 @@ export default function Toolbar(props: Props): React.JSX.Element {
       <span className="sep" />
 
       <button onClick={props.onRotateLeft} disabled={d} title="現在のページを左に90°回転">
-        ↺ 左回転
+        ↺ 左
       </button>
       <button onClick={props.onRotateRight} disabled={d} title="現在のページを右に90°回転">
-        ↻ 右回転
+        ↻ 右
       </button>
       <button onClick={props.onMoveUp} disabled={d}>
         ◀ 前へ
