@@ -20,6 +20,11 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
   `SelectMode='text'|'rect'`（既定 text）。ドラッグ中はIPCをthrottle(40ms)してライブプレビュー。
 - ページ一覧の表示: pt寸法は分かりにくいので `PageSidebar` の `sizeLabel` で A4縦 等の用紙名に変換
   （許容±4mm、未一致は mm 表記）。
+- サムネイルサイドバー: `PageSidebar` が実画像サムネ（`Thumb` が IntersectionObserver で遅延レンダ、
+  blobURLはunmount/再描画時にrevoke、`refreshKey`で編集後に再生成）。チェックボックス＋複数選択
+  （クリックでナビ＋アンカー、Shiftで範囲チェック、Ctrlでトグル）。一括削除/回転は
+  `deletePages`/`rotatePages`（各1ジャーナル操作＝1undo）。削除はインデックスがずれるため pending を全クリア、
+  回転は対象ページのマークのみ除去。
 - 固有名詞・指示・AI連携: UIは `components/RedactByTermsModal.tsx`（2タブ「AIに依頼」「結果を貼り戻す/自動抽出」）。
   - 依頼: カテゴリ＋自由記述＋（任意で本文同梱）から JSON出力契約のプロンプトを生成し、`writeClipboard`（preloadのelectron clipboard）でコピー。本文は `documentText`/`getDocumentText`。
   - 貼り戻し: `parsePlan`（コードフェンス/前後文混在でもJSON抽出、ダメなら`parseMarkdown`にフォールバック）。`{text,reason,scope}`。

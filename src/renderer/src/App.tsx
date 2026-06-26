@@ -3,6 +3,7 @@ import type {
   BindingSide,
   DocumentInfo,
   RedactionRect,
+  RotateDelta,
   SelectMode,
   WordHit
 } from '@shared/types'
@@ -189,6 +190,33 @@ export default function App(): React.JSX.Element {
       setRefreshKey((k) => k + 1)
       setStatus(`ページを削除しました（残り ${info.pageCount} ページ）。`)
     }, 'ページ削除')
+
+  const bulkDelete = (indices: number[]): Promise<void> =>
+    run(async () => {
+      if (!doc || indices.length === 0) return
+      const info = await pdfApi.deletePages(indices)
+      pushHist(true, pending, [])
+      setDoc(info)
+      setPending([]) // page indices shift after deletion
+      setCurrentPage((c) => Math.min(c, info.pageCount - 1))
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setStatus(`${indices.length} ページを削除しました（残り ${info.pageCount} ページ）。`)
+    }, 'ページ一括削除')
+
+  const bulkRotate = (indices: number[], delta: RotateDelta): Promise<void> =>
+    run(async () => {
+      if (!doc || indices.length === 0) return
+      const info = await pdfApi.rotatePages(indices, delta)
+      const set = new Set(indices)
+      const next = pending.filter((r) => !set.has(r.pageIndex))
+      pushHist(true, pending, next)
+      setDoc(info)
+      setPending(next)
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setStatus(`${indices.length} ページを回転しました。`)
+    }, 'ページ一括回転')
 
   const move = (dir: -1 | 1): Promise<void> =>
     run(async () => {
@@ -504,7 +532,10 @@ export default function App(): React.JSX.Element {
             doc={doc}
             currentPage={currentPage}
             pendingCountByPage={pendingCountByPage}
+            refreshKey={refreshKey}
             onSelect={setCurrentPage}
+            onBulkDelete={bulkDelete}
+            onBulkRotate={bulkRotate}
           />
         )}
 

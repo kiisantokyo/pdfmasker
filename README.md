@@ -17,6 +17,7 @@ each marked region.
 - 🧾 **Offline entity extraction** — auto-extract likely proper nouns & PII via offline heuristics, no AI needed.
 - 📐 **Binding margin** — shrink page content to leave a staple/binding margin on any edge.
 - 📂 **Open via button or drag & drop** — drop a PDF anywhere on the window.
+- 🗂️ **Thumbnail sidebar** — real page thumbnails with checkboxes; click to navigate, Shift-click for range-check, Ctrl-click to toggle; bulk-delete / bulk-rotate selected pages.
 - 📄 **Page editing** — delete, reorder (move ◀/▶), and rotate pages.
 - ↶ **Undo / Redo** (Ctrl+Z / Ctrl+Y) for every action — marks, applied redaction, page delete/move/rotate, binding margin (via the mupdf journal).
 - 🔍 Zoomable page viewer (Ctrl + wheel) with per-page pending-redaction badges.

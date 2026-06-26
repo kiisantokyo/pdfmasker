@@ -360,6 +360,34 @@ export function deletePage(index: number): DocumentInfo {
   return getInfo()
 }
 
+/** Delete multiple pages at once (single undoable operation). */
+export function deletePages(indices: number[]): DocumentInfo {
+  const d = requireDoc()
+  const drop = new Set(indices)
+  const keep = Array.from({ length: d.countPages() }, (_, i) => i).filter(
+    (i) => !drop.has(i)
+  )
+  if (keep.length === 0) throw new Error('全てのページは削除できません')
+  if (keep.length === d.countPages()) return getInfo()
+  operation('ページ削除', () => d.rearrangePages(keep))
+  return getInfo()
+}
+
+/** Rotate multiple pages at once (single undoable operation). */
+export function rotatePages(indices: number[], delta: RotateDelta): DocumentInfo {
+  const d = requireDoc()
+  if (indices.length === 0) return getInfo()
+  operation('ページ回転', () => {
+    for (const i of indices) {
+      const page = d.loadPage(i)
+      const obj = page.getObject()
+      const current = readRotation(page)
+      obj.put('Rotate', (((current + delta) % 360) + 360) % 360)
+    }
+  })
+  return getInfo()
+}
+
 /** Move a page from one position to another, preserving the rest of the order. */
 export function movePage(from: number, to: number): DocumentInfo {
   const d = requireDoc()

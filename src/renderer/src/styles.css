@@ -105,7 +105,7 @@ body {
 }
 
 .sidebar {
-  width: 200px;
+  width: 210px;
   background: var(--panel);
   border-right: 1px solid var(--border);
   overflow-y: auto;
@@ -118,6 +118,49 @@ body {
   position: sticky;
   top: 0;
   background: var(--panel);
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+}
+.bulk-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.bulk-actions {
+  display: flex;
+  gap: 6px;
+}
+.bulk-actions button {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 0;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+}
+.bulk-actions button:hover {
+  border-color: var(--accent);
+}
+.bulk-actions button.danger {
+  color: #a82a40;
+  border-color: #e6b8c1;
 }
 .page-list {
   list-style: none;
@@ -127,34 +170,66 @@ body {
 .page-item {
   width: 100%;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text);
-  padding: 8px 10px;
-  margin-bottom: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
   cursor: pointer;
-  text-align: left;
 }
 .page-item:hover {
   border-color: var(--accent);
 }
 .page-item.active {
   border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.page-item.checked {
   background: var(--accent-soft);
+}
+.thumb-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.thumb-top input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.thumb-img {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  min-height: 40px;
+}
+.thumb-img img {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 .page-num {
   font-weight: 700;
-  min-width: 20px;
+  min-width: 18px;
+}
+.page-rot {
+  font-size: 10px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 0 5px;
 }
 .page-dims {
   color: var(--muted);
   font-size: 11px;
-  flex: 1;
 }
 .page-badge {
+  margin-left: auto;
   background: var(--danger);
   color: #fff;
   border-radius: 10px;

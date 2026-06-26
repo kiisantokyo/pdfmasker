@@ -57,6 +57,10 @@ const api = {
   writeClipboard: (text: string): void => clipboard.writeText(text),
   deletePage: (index: number): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.deletePage, index),
+  deletePages: (indices: number[]): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.deletePages, indices),
+  rotatePages: (indices: number[], delta: RotateDelta): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.rotatePages, indices, delta),
   movePage: (from: number, to: number): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.movePage, from, to),
   rotatePage: (index: number, delta: RotateDelta): Promise<DocumentInfo> =>
