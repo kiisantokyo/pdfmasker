@@ -13,7 +13,8 @@ each marked region.
 - 🖍️ **True redaction** — mark areas; underlying text/images are removed, not just covered.
 - ✏️ **Two selection modes** — drag *over text* (snaps to words/lines) or draw a freehand rectangle (for images/logos). Toggle in the toolbar.
 - 🖱️ **Click a word to redact** — choose "this word only" or "every occurrence in the document".
-- 🧾 **Entity / instruction redaction** — auto-extract likely proper nouns & PII (offline heuristics), or paste markdown instructions from an external AI (ChatGPT/Gemini) and redact the listed terms. The app itself never sends data anywhere.
+- 🤖 **AI round-trip workflow** — generate a tailored prompt (pick categories + free-text), copy it to the clipboard, run it in ChatGPT/Gemini yourself with the PDF, then paste the result back (JSON or markdown) and review/apply. The app itself never sends data anywhere; you control the upload.
+- 🧾 **Offline entity extraction** — auto-extract likely proper nouns & PII via offline heuristics, no AI needed.
 - 📐 **Binding margin** — shrink page content to leave a staple/binding margin on any edge.
 - 📂 **Open via button or drag & drop** — drop a PDF anywhere on the window.
 - 📄 **Page editing** — delete, reorder (move ◀/▶), and rotate pages.

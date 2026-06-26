@@ -78,9 +78,9 @@ export default function Toolbar(props: Props): React.JSX.Element {
       <button
         onClick={props.onRedactByTerms}
         disabled={d}
-        title="固有名詞の自動抽出、または外部AIの指示（Markdown）から墨消し対象を選びます"
+        title="AIに依頼するプロンプト生成、結果の貼り戻し、または固有名詞の自動抽出"
       >
-        固有名詞/指示…
+        AI連携/固有名詞…
       </button>
 
       <span className="sep" />

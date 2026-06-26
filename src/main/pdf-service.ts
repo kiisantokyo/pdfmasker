@@ -8,6 +8,7 @@ import type {
   PageInfo,
   RedactionRect,
   RotateDelta,
+  ScopedTerm,
   TermCount,
   WordHit
 } from '../shared/types'
@@ -328,6 +329,26 @@ export function findTerms(terms: string[]): RedactionRect[] {
     rects.push(...findWord(term))
   }
   return rects
+}
+
+/** Like findTerms, but honours each term's scope ('all' | 'first'). */
+export function findTermsScoped(items: ScopedTerm[]): RedactionRect[] {
+  const rects: RedactionRect[] = []
+  const seen = new Set<string>()
+  for (const it of items) {
+    const term = it.text.trim()
+    if (!term || seen.has(term)) continue
+    seen.add(term)
+    const hits = findWord(term)
+    rects.push(...(it.scope === 'first' ? hits.slice(0, 1) : hits))
+  }
+  return rects
+}
+
+/** Full plain text of the document (for building an AI prompt). */
+export function getDocumentText(): string {
+  requireDoc()
+  return documentText()
 }
 
 export function deletePage(index: number): DocumentInfo {
