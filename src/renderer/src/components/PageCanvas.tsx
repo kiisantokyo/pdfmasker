@@ -12,6 +12,7 @@ interface Props {
   onAddRects: (rects: RedactionRect[]) => void
   /** A click (not a drag) at a point — page-space pt + screen pt for menu placement. */
   onWordClick: (
+    pageIndex: number,
     pagePt: { x: number; y: number },
     clientPt: { x: number; y: number }
   ) => void
@@ -169,6 +170,7 @@ export default function PageCanvas({
 
     if (isClick) {
       onWordClick(
+        pageIndex,
         { x: drag.x0 / zoom, y: drag.y0 / zoom },
         { x: e.clientX, y: e.clientY }
       )

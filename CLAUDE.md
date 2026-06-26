@@ -32,6 +32,10 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
   - **方針: アプリは外部送信しない。** PDFを外部AIに送るのはユーザー操作（モーダルに警告表示）。AI案は必ず一覧で人間が取捨選択。
 - 閉じ代: `addBindingMargin`（コンテンツストリームを `q s 0 0 s tx ty cm ... Q` で包んで均等縮小・シフト）。
 - Ctrl+ホイールズーム: `components/PageCanvas.tsx`（passive:false の wheel リスナ）。
+- 連続スクロールビュー: `components/ContinuousViewer.tsx`。全ページをスタックし、IntersectionObserver で
+  ①近傍ページを遅延マウント（`mounted` Set、rootMargin 500px）②最可視ページを `onVisiblePage` で currentPage に反映。
+  外部ナビは `scrollTarget={page,n}`（nを増やして scrollIntoView）→ スクロール起因の更新とループしない。
+  `PageCanvas` は1ページ単位の描画/選択を担当（`onWordClick` は pageIndex 付き）。
 
 ## Drag & drop
 - Opening a PDF works via the 開く button **and** by dropping a file on the

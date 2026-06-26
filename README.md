@@ -20,6 +20,7 @@ each marked region.
 - 🗂️ **Thumbnail sidebar** — real page thumbnails with checkboxes; click to navigate, Shift-click for range-check, Ctrl-click to toggle; bulk-delete / bulk-rotate selected pages.
 - 📄 **Page editing** — delete, reorder (move ◀/▶), and rotate pages.
 - ↶ **Undo / Redo** (Ctrl+Z / Ctrl+Y) for every action — marks, applied redaction, page delete/move/rotate, binding margin (via the mupdf journal).
+- 📜 **Continuous vertical scroll** — all pages in one scrollable view; edit/redact any page without switching. Lazy-rendered with current-page tracking.
 - 🔍 Zoomable page viewer (Ctrl + wheel) with per-page pending-redaction badges.
 - 💾 Save in place or Save As.
 - 🔒 Fully offline — PDFs never leave your machine.

@@ -10,7 +10,7 @@ import type {
 import { pdfApi } from './lib/api'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
-import PageCanvas from './components/PageCanvas'
+import ContinuousViewer from './components/ContinuousViewer'
 import RedactByTermsModal from './components/RedactByTermsModal'
 
 export default function App(): React.JSX.Element {
@@ -24,6 +24,16 @@ export default function App(): React.JSX.Element {
   const [status, setStatus] = useState('PDFを開いて始めましょう。')
   const [dragging, setDragging] = useState(false)
   const [selectMode, setSelectMode] = useState<SelectMode>('text')
+  const [scrollTarget, setScrollTarget] = useState({ page: 0, n: 0 })
+
+  const navigateTo = useCallback((index: number) => {
+    setCurrentPage(index)
+    setScrollTarget((t) => ({ page: index, n: t.n + 1 }))
+  }, [])
+
+  const onVisiblePage = useCallback((index: number) => {
+    setCurrentPage(index)
+  }, [])
   const [wordMenu, setWordMenu] = useState<
     (WordHit & { x: number; y: number }) | null
   >(null)
@@ -36,11 +46,6 @@ export default function App(): React.JSX.Element {
   const clampZoom = useCallback(
     (z: number) => setZoom(Math.min(3, Math.max(0.5, Math.round(z * 100) / 100))),
     []
-  )
-
-  const pendingForPage = useMemo(
-    () => pending.filter((r) => r.pageIndex === currentPage),
-    [pending, currentPage]
   )
 
   const pendingCountByPage = useMemo(() => {
@@ -257,11 +262,12 @@ export default function App(): React.JSX.Element {
     }, '名前を付けて保存')
 
   const onWordClick = (
+    pageIndex: number,
     pagePt: { x: number; y: number },
     clientPt: { x: number; y: number }
   ): Promise<void> =>
     run(async () => {
-      const hit = await pdfApi.wordAt(currentPage, pagePt.x, pagePt.y)
+      const hit = await pdfApi.wordAt(pageIndex, pagePt.x, pagePt.y)
       if (!hit) {
         setWordMenu(null)
         setStatus('単語が見つかりませんでした（画像化されたPDFかもしれません）。')
@@ -533,25 +539,27 @@ export default function App(): React.JSX.Element {
             currentPage={currentPage}
             pendingCountByPage={pendingCountByPage}
             refreshKey={refreshKey}
-            onSelect={setCurrentPage}
+            onSelect={navigateTo}
             onBulkDelete={bulkDelete}
             onBulkRotate={bulkRotate}
           />
         )}
 
-        <main className="viewer">
-          {doc ? (
-            <PageCanvas
-              pageIndex={currentPage}
-              zoom={zoom}
-              pendingRects={pendingForPage}
-              selectMode={selectMode}
-              refreshKey={refreshKey}
-              onAddRects={(rs) => commitMarks([...pending, ...rs])}
-              onWordClick={onWordClick}
-              onZoomChange={clampZoom}
-            />
-          ) : (
+        {doc ? (
+          <ContinuousViewer
+            pages={doc.pages}
+            zoom={zoom}
+            pending={pending}
+            selectMode={selectMode}
+            refreshKey={refreshKey}
+            scrollTarget={scrollTarget}
+            onVisiblePage={onVisiblePage}
+            onAddRects={(rs) => commitMarks([...pending, ...rs])}
+            onWordClick={onWordClick}
+            onZoomChange={clampZoom}
+          />
+        ) : (
+          <main className="viewer">
             <div className="empty">
               <h1>究極の墨消し</h1>
               <p>
@@ -563,8 +571,8 @@ export default function App(): React.JSX.Element {
                 ここにPDFファイルをドラッグ＆ドロップしても開けます。
               </p>
             </div>
-          )}
-        </main>
+          </main>
+        )}
       </div>
 
       <footer className="statusbar">
