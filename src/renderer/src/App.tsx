@@ -385,6 +385,27 @@ export default function App(): React.JSX.Element {
       setStatus('選択に追加しました。上部の「墨」または「黄」で処理します。')
     }, '単語の選択')
 
+  // Ctrl/Cmd + click removes a selected mark under the cursor (deselect).
+  const onCtrlClick = (
+    pageIndex: number,
+    pt: { x: number; y: number }
+  ): void => {
+    const next = pending.filter(
+      (r) =>
+        !(
+          r.pageIndex === pageIndex &&
+          pt.x >= Math.min(r.x0, r.x1) &&
+          pt.x <= Math.max(r.x0, r.x1) &&
+          pt.y >= Math.min(r.y0, r.y1) &&
+          pt.y <= Math.max(r.y0, r.y1)
+        )
+    )
+    if (next.length !== pending.length) {
+      commitMarks(next)
+      setStatus('選択を解除しました。')
+    }
+  }
+
   // Dragging text adds the selection (accumulates) and remembers its text.
   const onTextSelect = (
     pageIndex: number,
@@ -791,6 +812,7 @@ export default function App(): React.JSX.Element {
             onVisiblePage={onVisiblePage}
             onAddRects={(rs) => commitMarks([...pending, ...rs])}
             onWordClick={onWordClick}
+            onCtrlClick={onCtrlClick}
             onTextSelect={onTextSelect}
             onZoomChange={clampZoom}
           />

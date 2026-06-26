@@ -16,6 +16,8 @@ interface Props {
     pagePt: { x: number; y: number },
     clientPt: { x: number; y: number }
   ) => void
+  /** Ctrl/Cmd + click — remove a selected mark under the point, if any. */
+  onCtrlClick: (pageIndex: number, pagePt: { x: number; y: number }) => void
   /** A text-mode drag selection — page-space rect + screen pt for menu placement. */
   onTextSelect: (
     pageIndex: number,
@@ -42,6 +44,7 @@ export default function PageCanvas({
   selectMode,
   onAddRects,
   onWordClick,
+  onCtrlClick,
   onTextSelect,
   onZoomChange,
   refreshKey
@@ -178,11 +181,12 @@ export default function PageCanvas({
     const isClick = dx <= 4 && dy <= 4
 
     if (isClick) {
-      onWordClick(
-        pageIndex,
-        { x: drag.x0 / zoom, y: drag.y0 / zoom },
-        { x: e.clientX, y: e.clientY }
-      )
+      const pt = { x: drag.x0 / zoom, y: drag.y0 / zoom }
+      if (e.ctrlKey || e.metaKey) {
+        onCtrlClick(pageIndex, pt)
+      } else {
+        onWordClick(pageIndex, pt, { x: e.clientX, y: e.clientY })
+      }
     } else if (selectMode === 'text') {
       // Hand the dragged text selection to the menu (redact / search / highlight).
       onTextSelect(
