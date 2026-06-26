@@ -37,6 +37,16 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
   外部ナビは `scrollTarget={page,n}`（nを増やして scrollIntoView）→ スクロール起因の更新とループしない。
   `PageCanvas` は1ページ単位の描画/選択を担当（`onWordClick` は pageIndex 付き）。
 
+## OCR（スキャンPDF対応）
+- 開いたPDFに文字情報が無い（`needsOcr`）と確認ダイアログ→「はい」で `runOcr`（Tesseract.js, jpn+eng,
+  メインプロセス）。各ページを200dpiでpixmap化→認識→単語＋bboxを **px/zoom で page-pt に変換**し
+  `ocr: Map<pageIndex, OcrWord[]>` にメモリ保持（`enableJournal` 対象外・保存しない）。
+- `documentText`/`wordAt`/`findWord`/`selectText` はネイティブ文字が無いとき OCR にフォールバック。
+  → 検索・単語クリック・なぞり・固有名詞抽出・AI同梱がスキャンPDFでも機能。墨消し自体は画像領域の実削除。
+- モデルは `app.getPath('userData')/tessdata` にキャッシュ（初回のみネットワーク取得）。PDFは外部送信しない。
+- 注意: OCRランタイム（モデルDL/worker）はヘッドレスで未検証。パッケージ時は worker/core/traineddata の
+  同梱（asar unpack 等）が別途必要になる見込み。
+
 ## Drag & drop
 - Opening a PDF works via the 開く button **and** by dropping a file on the
   window. Electron 42 removed `File.path`, so the dropped path is resolved with

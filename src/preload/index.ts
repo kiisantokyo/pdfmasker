@@ -55,6 +55,15 @@ const api = {
     ipcRenderer.invoke(IPC.findTermsScoped, items),
   documentText: (): Promise<string> => ipcRenderer.invoke(IPC.documentText),
   writeClipboard: (text: string): void => clipboard.writeText(text),
+  needsOcr: (): Promise<boolean> => ipcRenderer.invoke(IPC.needsOcr),
+  runOcr: (): Promise<{ total: number; info: DocumentInfo }> =>
+    ipcRenderer.invoke(IPC.runOcr),
+  onOcrProgress: (cb: (p: { page: number; count: number }) => void): (() => void) => {
+    const handler = (_e: unknown, p: { page: number; count: number }): void =>
+      cb(p)
+    ipcRenderer.on(IPC.ocrProgress, handler)
+    return () => ipcRenderer.removeListener(IPC.ocrProgress, handler)
+  },
   deletePage: (index: number): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.deletePage, index),
   deletePages: (indices: number[]): Promise<DocumentInfo> =>

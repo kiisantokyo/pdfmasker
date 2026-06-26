@@ -15,6 +15,7 @@ each marked region.
 - 🖱️ **Click a word to redact** — choose "this word only" or "every occurrence in the document".
 - 🤖 **AI round-trip workflow** — generate a tailored prompt (pick categories + free-text), copy it to the clipboard, run it in ChatGPT/Gemini yourself with the PDF, then paste the result back (JSON or markdown) and review/apply. The app itself never sends data anywhere; you control the upload.
 - 🧾 **Offline entity extraction** — auto-extract likely proper nouns & PII via offline heuristics, no AI needed.
+- 🔠 **OCR for scanned PDFs** — on opening a text-less PDF, offer to OCR it (Tesseract.js, jpn+eng) so search / click-word / extraction work; redaction still physically removes the image area. The page image is processed locally (first run downloads the language model).
 - 📐 **Binding margin** — shrink page content to leave a staple/binding margin on any edge.
 - 📂 **Open via button or drag & drop** — drop a PDF anywhere on the window.
 - 🗂️ **Thumbnail sidebar** — real page thumbnails with checkboxes; click to navigate, Shift-click for range-check, Ctrl-click to toggle; bulk-delete / bulk-rotate selected pages.

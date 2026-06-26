@@ -74,6 +74,9 @@ export default function App(): React.JSX.Element {
     'portrait'
   )
   const [resizeAll, setResizeAll] = useState(false)
+  const [ocrPrompt, setOcrPrompt] = useState(false)
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState({ page: 0, count: 0 })
 
   const clampZoom = useCallback(
     (z: number) => setZoom(Math.min(3, Math.max(0.5, Math.round(z * 100) / 100))),
@@ -157,6 +160,7 @@ export default function App(): React.JSX.Element {
       const info = await pdfApi.open()
       if (!info) return
       applyOpened(info)
+      if (await pdfApi.needsOcr()) setOcrPrompt(true)
     }, '開く')
 
   const openPath = useCallback(
@@ -164,9 +168,31 @@ export default function App(): React.JSX.Element {
       run(async () => {
         const info = await pdfApi.openFromPath(path)
         applyOpened(info)
+        if (await pdfApi.needsOcr()) setOcrPrompt(true)
       }, '開く'),
     [run, applyOpened]
   )
+
+  const runOcr = (): Promise<void> =>
+    run(async () => {
+      setOcrPrompt(false)
+      setOcrBusy(true)
+      setOcrProgress({ page: 0, count: 0 })
+      const off = pdfApi.onOcrProgress((p) => setOcrProgress(p))
+      try {
+        const { info, total } = await pdfApi.runOcr()
+        setDoc(info)
+        setRefreshKey((k) => k + 1)
+        setStatus(
+          total > 0
+            ? `OCR完了：${total} 個の語を認識しました。検索・単語クリック・固有名詞抽出が使えます。`
+            : 'OCRを実行しましたが、文字を認識できませんでした。'
+        )
+      } finally {
+        off()
+        setOcrBusy(false)
+      }
+    }, 'OCR')
 
   const applyRedactions = (): Promise<void> =>
     run(async () => {
@@ -561,6 +587,54 @@ export default function App(): React.JSX.Element {
               <button className="modal-primary" onClick={applyBinding} disabled={busy}>
                 適用
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ocrPrompt && (
+        <div className="modal-backdrop" onClick={() => setOcrPrompt(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>OCR（文字認識）を実行しますか？</h2>
+            <p className="modal-desc">
+              このPDFには文字情報が見つかりませんでした（スキャン画像の可能性）。
+              OCRを実行すると、検索・単語クリック・固有名詞抽出・AI連携が使えるようになります。
+              処理は端末内で行われ、外部に送信しません。
+            </p>
+            <p className="warn">
+              ⚠ 初回は日本語/英語の認識モデル（数十MB）の取得が必要です。ページ数に応じて時間がかかります。
+            </p>
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setOcrPrompt(false)}>
+                いいえ
+              </button>
+              <button className="modal-primary" onClick={runOcr}>
+                はい（OCRを実行）
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ocrBusy && (
+        <div className="modal-backdrop">
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>OCR処理中…</h2>
+            <p className="modal-desc">
+              {ocrProgress.count > 0
+                ? `ページ ${ocrProgress.page} / ${ocrProgress.count} を処理しています。`
+                : '認識モデルを準備しています…'}
+            </p>
+            <div className="ocr-bar">
+              <div
+                className="ocr-bar-fill"
+                style={{
+                  width:
+                    ocrProgress.count > 0
+                      ? `${(ocrProgress.page / ocrProgress.count) * 100}%`
+                      : '10%'
+                }}
+              />
             </div>
           </div>
         </div>
