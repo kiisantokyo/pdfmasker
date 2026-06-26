@@ -68,9 +68,6 @@ export default function App(): React.JSX.Element {
   const [bindAll, setBindAll] = useState(true)
   const [resizeOpen, setResizeOpen] = useState(false)
   const [resizePaper, setResizePaper] = useState('A4')
-  const [resizeOrient, setResizeOrient] = useState<'portrait' | 'landscape'>(
-    'portrait'
-  )
   const [resizeAll, setResizeAll] = useState(false)
   const [ocrPrompt, setOcrPrompt] = useState(false)
   const [ocrBusy, setOcrBusy] = useState(false)
@@ -305,10 +302,8 @@ export default function App(): React.JSX.Element {
     run(async () => {
       if (!doc) return
       const paper = PAPER_SIZES.find((p) => p.name === resizePaper) ?? PAPER_SIZES[1]
-      const [wmm, hmm] =
-        resizeOrient === 'portrait' ? [paper.w, paper.h] : [paper.h, paper.w]
       const indices = resizeAll ? doc.pages.map((p) => p.index) : [currentPage]
-      const info = await pdfApi.resizePages(indices, wmm, hmm)
+      const info = await pdfApi.resizePages(indices, paper.w, paper.h)
       pushHist(true, pending, [])
       setDoc(info)
       setPending([])
@@ -316,7 +311,7 @@ export default function App(): React.JSX.Element {
       setRefreshKey((k) => k + 1)
       setResizeOpen(false)
       setStatus(
-        `${indices.length} ページを ${paper.name}${resizeOrient === 'portrait' ? '縦' : '横'} に変更しました。`
+        `${indices.length} ページを ${paper.name} に変更しました（向きは維持）。`
       )
     }, '用紙サイズ変更')
 
@@ -356,7 +351,8 @@ export default function App(): React.JSX.Element {
       pushHist(true, pending, [])
       setDoc(info)
       setPending([])
-      setCurrentPage(to)
+      // Follow the moved page to its new position so focus stays on it.
+      navigateTo(to)
       setDirty(true)
       setRefreshKey((k) => k + 1)
       setStatus(`ページを ${to + 1} 番目に移動しました。`)
@@ -712,25 +708,9 @@ export default function App(): React.JSX.Element {
               </select>
             </div>
 
-            <div className="field">
-              <span className="field-label">向き</span>
-              <label className="radio">
-                <input
-                  type="radio"
-                  checked={resizeOrient === 'portrait'}
-                  onChange={() => setResizeOrient('portrait')}
-                />
-                縦
-              </label>
-              <label className="radio">
-                <input
-                  type="radio"
-                  checked={resizeOrient === 'landscape'}
-                  onChange={() => setResizeOrient('landscape')}
-                />
-                横
-              </label>
-            </div>
+            <p className="modal-desc" style={{ margin: '0 0 12px' }}>
+              ※ 向きは各ページの現状を維持します（回転は回転ボタンで行ってください）。
+            </p>
 
             <div className="field">
               <span className="field-label">対象</span>

@@ -53,14 +53,14 @@ export default function Toolbar(props: Props): React.JSX.Element {
         disabled={!props.canUndo || busy}
         title="元に戻す (Ctrl+Z)"
       >
-        ↶ 元に戻す
+        ↶
       </button>
       <button
         onClick={props.onRedo}
         disabled={!props.canRedo || busy}
         title="やり直す (Ctrl+Y)"
       >
-        ↷ やり直す
+        ↷
       </button>
 
       <span className="sep" />

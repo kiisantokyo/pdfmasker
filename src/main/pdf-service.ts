@@ -654,9 +654,11 @@ export function resizePages(
 ): DocumentInfo {
   const d = requireDoc()
   if (indices.length === 0) return getInfo()
-  const tW = widthMm * MM_TO_PT
-  const tH = heightMm * MM_TO_PT
-  if (tW <= 0 || tH <= 0) return getInfo()
+  // The chosen paper as long/short edges; orientation is kept per page (rotation
+  // is a separate operation), so changing size never flips the layout.
+  const longMm = Math.max(widthMm, heightMm)
+  const shortMm = Math.min(widthMm, heightMm)
+  if (longMm <= 0) return getInfo()
 
   operation('用紙サイズ変更', () => {
     for (const i of indices) {
@@ -665,6 +667,11 @@ export function resizePages(
       const W = urx - llx
       const H = ury - lly
       if (W <= 0 || H <= 0) continue
+
+      // Match the page's current orientation.
+      const landscape = W > H
+      const tW = (landscape ? longMm : shortMm) * MM_TO_PT
+      const tH = (landscape ? shortMm : longMm) * MM_TO_PT
 
       const s = Math.min(tW / W, tH / H)
       const tx = (tW - W * s) / 2 - llx * s
