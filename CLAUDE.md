@@ -20,9 +20,11 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
   `SelectMode='text'|'rect'`（既定 text）。ドラッグ中はIPCをthrottle(40ms)してライブプレビュー。
 - ページ一覧の表示: pt寸法は分かりにくいので `PageSidebar` の `sizeLabel` で A4縦 等の用紙名に変換
   （許容±4mm、未一致は mm 表記）。
-- 固有名詞・指示: `extractCandidates`（オフライン正規表現ヒューリスティック）/ `countTerms` / `findTerms`。
-  UIは `components/RedactByTermsModal.tsx`。Markdown解析は同ファイル内 `parseMarkdown`。
-  **方針: アプリは外部送信しない。** 高精度が要るときはユーザーが外部AIで作った指示(Markdown)を貼り付ける。
+- 固有名詞・指示・AI連携: UIは `components/RedactByTermsModal.tsx`（2タブ「AIに依頼」「結果を貼り戻す/自動抽出」）。
+  - 依頼: カテゴリ＋自由記述＋（任意で本文同梱）から JSON出力契約のプロンプトを生成し、`writeClipboard`（preloadのelectron clipboard）でコピー。本文は `documentText`/`getDocumentText`。
+  - 貼り戻し: `parsePlan`（コードフェンス/前後文混在でもJSON抽出、ダメなら`parseMarkdown`にフォールバック）。`{text,reason,scope}`。
+  - 検索/適用: `countTerms`（件数・0件は不一致表示）/ `findTermsScoped`（scope=all|firstを尊重）/ `findTerms` / `extractCandidates`。
+  - **方針: アプリは外部送信しない。** PDFを外部AIに送るのはユーザー操作（モーダルに警告表示）。AI案は必ず一覧で人間が取捨選択。
 - 閉じ代: `addBindingMargin`（コンテンツストリームを `q s 0 0 s tx ty cm ... Q` で包んで均等縮小・シフト）。
 - Ctrl+ホイールズーム: `components/PageCanvas.tsx`（passive:false の wheel リスナ）。
 

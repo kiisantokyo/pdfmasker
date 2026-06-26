@@ -1,10 +1,11 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { clipboard, contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from '../shared/types'
 import type {
   BindingMarginOptions,
   DocumentInfo,
   RedactionRect,
   RotateDelta,
+  ScopedTerm,
   TermCount,
   WordHit
 } from '../shared/types'
@@ -50,6 +51,10 @@ const api = {
     ipcRenderer.invoke(IPC.countTerms, terms),
   findTerms: (terms: string[]): Promise<RedactionRect[]> =>
     ipcRenderer.invoke(IPC.findTerms, terms),
+  findTermsScoped: (items: ScopedTerm[]): Promise<RedactionRect[]> =>
+    ipcRenderer.invoke(IPC.findTermsScoped, items),
+  documentText: (): Promise<string> => ipcRenderer.invoke(IPC.documentText),
+  writeClipboard: (text: string): void => clipboard.writeText(text),
   deletePage: (index: number): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.deletePage, index),
   movePage: (from: number, to: number): Promise<DocumentInfo> =>

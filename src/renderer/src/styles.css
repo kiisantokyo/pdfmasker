@@ -316,6 +316,8 @@ body {
   padding: 22px 24px;
   width: 360px;
   max-width: 92vw;
+  max-height: 88vh;
+  overflow-y: auto;
 }
 .modal h2 {
   margin: 0 0 4px;
@@ -509,6 +511,82 @@ body {
   color: var(--muted);
   min-width: 36px;
   text-align: right;
+}
+.term-missing {
+  opacity: 0.5;
+}
+.term-scope {
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 0 6px;
+}
+
+/* AI modal: tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 6px 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.tab-body {
+  display: flex;
+  flex-direction: column;
+}
+.cat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+.cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.cat input {
+  accent-color: var(--accent);
+}
+.text-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+}
+.prompt-area {
+  height: 150px;
+  margin-top: 8px;
+}
+.warn {
+  font-size: 12px;
+  color: #a8612a;
+  background: #fbf0e3;
+  border: 1px solid #eccfad;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 10px 0 0;
 }
 
 /* Status bar */

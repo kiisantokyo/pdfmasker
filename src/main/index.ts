@@ -5,7 +5,8 @@ import { IPC } from '../shared/types'
 import type {
   BindingMarginOptions,
   RedactionRect,
-  RotateDelta
+  RotateDelta,
+  ScopedTerm
 } from '../shared/types'
 import * as pdf from './pdf-service'
 
@@ -91,6 +92,12 @@ function registerIpc(): void {
   ipcMain.handle(IPC.countTerms, (_e, terms: string[]) => pdf.countTerms(terms))
 
   ipcMain.handle(IPC.findTerms, (_e, terms: string[]) => pdf.findTerms(terms))
+
+  ipcMain.handle(IPC.findTermsScoped, (_e, items: ScopedTerm[]) =>
+    pdf.findTermsScoped(items)
+  )
+
+  ipcMain.handle(IPC.documentText, () => pdf.getDocumentText())
 
   ipcMain.handle(IPC.deletePage, (_e, index: number) => pdf.deletePage(index))
 

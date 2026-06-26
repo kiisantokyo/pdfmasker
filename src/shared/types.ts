@@ -61,6 +61,13 @@ export interface TermCount {
   kind?: string
 }
 
+/** A term to redact, with how widely to apply it. */
+export interface ScopedTerm {
+  text: string
+  /** 'all' = every occurrence (default), 'first' = first occurrence only. */
+  scope?: 'all' | 'first'
+}
+
 /** Which edge the binding (staple) margin is added to. */
 export type BindingSide = 'left' | 'right' | 'top' | 'bottom'
 
@@ -86,6 +93,8 @@ export const IPC = {
   extractCandidates: 'pdf:extractCandidates',
   countTerms: 'pdf:countTerms',
   findTerms: 'pdf:findTerms',
+  findTermsScoped: 'pdf:findTermsScoped',
+  documentText: 'pdf:documentText',
   deletePage: 'pdf:deletePage',
   movePage: 'pdf:movePage',
   rotatePage: 'pdf:rotatePage',
