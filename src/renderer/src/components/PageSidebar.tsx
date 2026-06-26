@@ -93,6 +93,7 @@ function Thumb({ index, widthPt, heightPt, refreshKey }: ThumbProps): React.JSX.
 
 interface Props {
   doc: DocumentInfo
+  width: number
   currentPage: number
   pendingCountByPage: Record<number, number>
   refreshKey: number
@@ -103,6 +104,7 @@ interface Props {
 
 export default function PageSidebar({
   doc,
+  width,
   currentPage,
   pendingCountByPage,
   refreshKey,
@@ -162,7 +164,7 @@ export default function PageSidebar({
   const allChecked = checked.size === doc.pageCount && doc.pageCount > 0
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ width }}>
       <div className="sidebar-title">
         <span>ページ ({doc.pageCount})</span>
         <button

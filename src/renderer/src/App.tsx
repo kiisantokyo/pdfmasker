@@ -13,6 +13,16 @@ import PageSidebar from './components/PageSidebar'
 import ContinuousViewer from './components/ContinuousViewer'
 import RedactByTermsModal from './components/RedactByTermsModal'
 
+const PAPER_SIZES = [
+  { name: 'A3', w: 297, h: 420 },
+  { name: 'A4', w: 210, h: 297 },
+  { name: 'A5', w: 148, h: 210 },
+  { name: 'B4', w: 257, h: 364 },
+  { name: 'B5', w: 182, h: 257 },
+  { name: 'レター', w: 216, h: 279 },
+  { name: 'リーガル', w: 216, h: 356 }
+]
+
 export default function App(): React.JSX.Element {
   const [doc, setDoc] = useState<DocumentInfo | null>(null)
   const [currentPage, setCurrentPage] = useState(0)
@@ -25,6 +35,21 @@ export default function App(): React.JSX.Element {
   const [dragging, setDragging] = useState(false)
   const [selectMode, setSelectMode] = useState<SelectMode>('text')
   const [scrollTarget, setScrollTarget] = useState({ page: 0, n: 0 })
+  const [sidebarW, setSidebarW] = useState(210)
+
+  const startResize = (e: React.PointerEvent): void => {
+    const startX = e.clientX
+    const startW = sidebarW
+    const onMove = (ev: PointerEvent): void => {
+      setSidebarW(Math.max(150, Math.min(560, startW + (ev.clientX - startX))))
+    }
+    const onUp = (): void => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
 
   const navigateTo = useCallback((index: number) => {
     setCurrentPage(index)
@@ -37,11 +62,18 @@ export default function App(): React.JSX.Element {
   const [wordMenu, setWordMenu] = useState<
     (WordHit & { x: number; y: number }) | null
   >(null)
+  const [wordEdit, setWordEdit] = useState('')
   const [termsOpen, setTermsOpen] = useState(false)
   const [bindingOpen, setBindingOpen] = useState(false)
   const [bindSide, setBindSide] = useState<BindingSide>('left')
   const [bindMm, setBindMm] = useState(20)
   const [bindAll, setBindAll] = useState(true)
+  const [resizeOpen, setResizeOpen] = useState(false)
+  const [resizePaper, setResizePaper] = useState('A4')
+  const [resizeOrient, setResizeOrient] = useState<'portrait' | 'landscape'>(
+    'portrait'
+  )
+  const [resizeAll, setResizeAll] = useState(false)
 
   const clampZoom = useCallback(
     (z: number) => setZoom(Math.min(3, Math.max(0.5, Math.round(z * 100) / 100))),
@@ -198,6 +230,25 @@ export default function App(): React.JSX.Element {
       setStatus(`ページを削除しました（残り ${info.pageCount} ページ）。`)
     }, 'ページ削除')
 
+  const applyResize = (): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      const paper = PAPER_SIZES.find((p) => p.name === resizePaper) ?? PAPER_SIZES[1]
+      const [wmm, hmm] =
+        resizeOrient === 'portrait' ? [paper.w, paper.h] : [paper.h, paper.w]
+      const indices = resizeAll ? doc.pages.map((p) => p.index) : [currentPage]
+      const info = await pdfApi.resizePages(indices, wmm, hmm)
+      pushHist(true, pending, [])
+      setDoc(info)
+      setPending([])
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setResizeOpen(false)
+      setStatus(
+        `${indices.length} ページを ${paper.name}${resizeOrient === 'portrait' ? '縦' : '横'} に変更しました。`
+      )
+    }, '用紙サイズ変更')
+
   const bulkDelete = (indices: number[]): Promise<void> =>
     run(async () => {
       if (!doc || indices.length === 0) return
@@ -276,22 +327,23 @@ export default function App(): React.JSX.Element {
         return
       }
       setWordMenu({ ...hit, x: clientPt.x, y: clientPt.y })
+      setWordEdit(hit.word)
     }, '単語の選択')
 
   const redactWordOnce = (): void => {
     if (!wordMenu) return
     commitMarks([...pending, wordMenu.rect])
-    setStatus(`「${wordMenu.word}」を1箇所マークしました。`)
+    setStatus('クリックした箇所をマークしました。')
     setWordMenu(null)
   }
 
   const redactWordAll = (): Promise<void> =>
     run(async () => {
-      if (!wordMenu) return
-      const { word } = wordMenu
-      const rects = await pdfApi.findWord(word)
+      const term = wordEdit.trim()
+      if (!term) return
+      const rects = await pdfApi.findWord(term)
       commitMarks([...pending, ...rects])
-      setStatus(`「${word}」を文書内 ${rects.length} 箇所マークしました。`)
+      setStatus(`「${term}」を文書内 ${rects.length} 箇所マークしました。`)
       setWordMenu(null)
     }, '単語の一括選択')
 
@@ -409,10 +461,18 @@ export default function App(): React.JSX.Element {
             style={{ left: wordMenu.x, top: wordMenu.y }}
           >
             <div className="word-menu-head">
-              選択した語：<b>{wordMenu.word}</b>
+              墨消しする語（編集できます）
             </div>
-            <button onClick={redactWordOnce}>この語のみ墨消し</button>
-            <button onClick={redactWordAll}>文書内の同じ語をすべて墨消し</button>
+            <input
+              className="word-menu-input"
+              value={wordEdit}
+              onChange={(e) => setWordEdit(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void redactWordAll()
+              }}
+            />
+            <button onClick={redactWordOnce}>クリックした箇所のみ墨消し</button>
+            <button onClick={redactWordAll}>この語を文書内すべて墨消し</button>
             <button className="word-menu-cancel" onClick={() => setWordMenu(null)}>
               キャンセル
             </button>
@@ -506,6 +566,82 @@ export default function App(): React.JSX.Element {
         </div>
       )}
 
+      {resizeOpen && (
+        <div className="modal-backdrop" onClick={() => setResizeOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>用紙サイズを変更</h2>
+            <p className="modal-desc">
+              指定したページを選んだ用紙サイズに変更し、内容を縦横比を保ったまま
+              拡大／縮小して中央に配置します。
+            </p>
+
+            <div className="field">
+              <span className="field-label">用紙サイズ</span>
+              <select
+                className="text-input"
+                value={resizePaper}
+                onChange={(e) => setResizePaper(e.target.value)}
+              >
+                {PAPER_SIZES.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="field">
+              <span className="field-label">向き</span>
+              <label className="radio">
+                <input
+                  type="radio"
+                  checked={resizeOrient === 'portrait'}
+                  onChange={() => setResizeOrient('portrait')}
+                />
+                縦
+              </label>
+              <label className="radio">
+                <input
+                  type="radio"
+                  checked={resizeOrient === 'landscape'}
+                  onChange={() => setResizeOrient('landscape')}
+                />
+                横
+              </label>
+            </div>
+
+            <div className="field">
+              <span className="field-label">対象</span>
+              <label className="radio">
+                <input
+                  type="radio"
+                  checked={!resizeAll}
+                  onChange={() => setResizeAll(false)}
+                />
+                現在のページ（{currentPage + 1}）
+              </label>
+              <label className="radio">
+                <input
+                  type="radio"
+                  checked={resizeAll}
+                  onChange={() => setResizeAll(true)}
+                />
+                全ページ
+              </label>
+            </div>
+
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setResizeOpen(false)}>
+                キャンセル
+              </button>
+              <button className="modal-primary" onClick={applyResize} disabled={busy}>
+                変更
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Toolbar
         hasDoc={!!doc}
         pendingCount={pending.length}
@@ -527,6 +663,7 @@ export default function App(): React.JSX.Element {
         onRotateLeft={() => rotate(-90)}
         onRotateRight={() => rotate(90)}
         onBindingMargin={() => setBindingOpen(true)}
+        onResizePage={() => setResizeOpen(true)}
         onDeletePage={deletePage}
         onMoveUp={() => move(-1)}
         onMoveDown={() => move(1)}
@@ -537,15 +674,23 @@ export default function App(): React.JSX.Element {
 
       <div className="body">
         {doc && (
-          <PageSidebar
-            doc={doc}
-            currentPage={currentPage}
-            pendingCountByPage={pendingCountByPage}
-            refreshKey={refreshKey}
-            onSelect={navigateTo}
-            onBulkDelete={bulkDelete}
-            onBulkRotate={bulkRotate}
-          />
+          <>
+            <PageSidebar
+              doc={doc}
+              width={sidebarW}
+              currentPage={currentPage}
+              pendingCountByPage={pendingCountByPage}
+              refreshKey={refreshKey}
+              onSelect={navigateTo}
+              onBulkDelete={bulkDelete}
+              onBulkRotate={bulkRotate}
+            />
+            <div
+              className="resizer"
+              onPointerDown={startResize}
+              title="ドラッグでサムネイル幅を変更"
+            />
+          </>
         )}
 
         {doc ? (

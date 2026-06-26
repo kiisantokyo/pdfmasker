@@ -61,6 +61,12 @@ const api = {
     ipcRenderer.invoke(IPC.deletePages, indices),
   rotatePages: (indices: number[], delta: RotateDelta): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.rotatePages, indices, delta),
+  resizePages: (
+    indices: number[],
+    widthMm: number,
+    heightMm: number
+  ): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.resizePages, indices, widthMm, heightMm),
   movePage: (from: number, to: number): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.movePage, from, to),
   rotatePage: (index: number, delta: RotateDelta): Promise<DocumentInfo> =>
