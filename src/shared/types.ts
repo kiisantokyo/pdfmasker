@@ -90,6 +90,8 @@ export const IPC = {
   movePage: 'pdf:movePage',
   rotatePage: 'pdf:rotatePage',
   bindingMargin: 'pdf:bindingMargin',
+  undo: 'pdf:undo',
+  redo: 'pdf:redo',
   save: 'pdf:save',
   saveAs: 'pdf:saveAs',
   hasUnsavedChanges: 'pdf:hasUnsavedChanges'

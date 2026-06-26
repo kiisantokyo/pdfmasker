@@ -109,6 +109,9 @@ function registerIpc(): void {
     (_e, opts: BindingMarginOptions) => pdf.addBindingMargin(opts)
   )
 
+  ipcMain.handle(IPC.undo, () => pdf.undo())
+  ipcMain.handle(IPC.redo, () => pdf.redo())
+
   ipcMain.handle(IPC.hasUnsavedChanges, () => pdf.hasUnsavedChanges())
 
   ipcMain.handle(IPC.save, async () => {

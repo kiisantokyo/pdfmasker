@@ -4,6 +4,13 @@
 Desktop PDF **true-redaction** + page-editing app. UI is in Japanese.
 Unrelated to other projects in this workspace (e.g. Mints Party Manager).
 
+## Undo/Redo（統一履歴）
+- ドキュメント変更は mupdf ジャーナル（`enableJournal` を loadDocument で有効化、各変更を
+  `operation()`＝beginOperation/endOperation で包む）。`undo()/redo()` を pdf-service に用意。
+- 未適用マーク(pending)はレンダラ状態。App に `undoStack/redoStack`（`{isDoc, before, after}`）を持ち、
+  doc変更はジャーナル undo/redo と LIFO で同期、marks は before/after で復元。Ctrl+Z / Ctrl+Y。
+- 全アクション（マーク追加・墨消し適用・削除/移動/回転・閉じ代・AI取り込み）が対象。
+
 ## Feature map (where things live)
 - 真の墨消し / 単語クリック / 検索 / 候補抽出 / 閉じ代: すべて `src/main/pdf-service.ts`
   （Electron非依存・純mupdf）。IPCは `src/main/index.ts`、橋渡しは `src/preload/index.ts`、

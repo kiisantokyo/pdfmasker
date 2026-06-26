@@ -17,6 +17,7 @@ each marked region.
 - 📐 **Binding margin** — shrink page content to leave a staple/binding margin on any edge.
 - 📂 **Open via button or drag & drop** — drop a PDF anywhere on the window.
 - 📄 **Page editing** — delete, reorder (move ◀/▶), and rotate pages.
+- ↶ **Undo / Redo** (Ctrl+Z / Ctrl+Y) for every action — marks, applied redaction, page delete/move/rotate, binding margin (via the mupdf journal).
 - 🔍 Zoomable page viewer (Ctrl + wheel) with per-page pending-redaction badges.
 - 💾 Save in place or Save As.
 - 🔒 Fully offline — PDFs never leave your machine.

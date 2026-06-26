@@ -7,7 +7,11 @@ interface Props {
   busy: boolean
   dirty: boolean
   selectMode: SelectMode
+  canUndo: boolean
+  canRedo: boolean
   onToggleSelectMode: () => void
+  onUndo: () => void
+  onRedo: () => void
   onOpen: () => void
   onApplyRedactions: () => void
   onClearPending: () => void
@@ -29,6 +33,23 @@ export default function Toolbar(props: Props): React.JSX.Element {
     <div className="toolbar">
       <button onClick={props.onOpen} disabled={busy}>
         開く…
+      </button>
+
+      <span className="sep" />
+
+      <button
+        onClick={props.onUndo}
+        disabled={!props.canUndo || busy}
+        title="元に戻す (Ctrl+Z)"
+      >
+        ↶ 元に戻す
+      </button>
+      <button
+        onClick={props.onRedo}
+        disabled={!props.canRedo || busy}
+        title="やり直す (Ctrl+Y)"
+      >
+        ↷ やり直す
       </button>
 
       <span className="sep" />
