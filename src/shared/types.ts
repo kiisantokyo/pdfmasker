@@ -100,6 +100,7 @@ export const IPC = {
   movePage: 'pdf:movePage',
   rotatePage: 'pdf:rotatePage',
   rotatePages: 'pdf:rotatePages',
+  resizePages: 'pdf:resizePages',
   bindingMargin: 'pdf:bindingMargin',
   undo: 'pdf:undo',
   redo: 'pdf:redo',

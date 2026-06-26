@@ -19,6 +19,7 @@ interface Props {
   onRotateLeft: () => void
   onRotateRight: () => void
   onBindingMargin: () => void
+  onResizePage: () => void
   onDeletePage: () => void
   onMoveUp: () => void
   onMoveDown: () => void
@@ -110,6 +111,14 @@ export default function Toolbar(props: Props): React.JSX.Element {
         title="ホチキスなどの閉じ代を確保するため、中身を縮小して余白を作ります"
       >
         閉じ代
+      </button>
+
+      <button
+        onClick={props.onResizePage}
+        disabled={d}
+        title="ページの用紙サイズを変更します（B5→A4 など）"
+      >
+        用紙サイズ
       </button>
 
       <span className="sep" />

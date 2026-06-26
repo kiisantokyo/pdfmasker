@@ -112,6 +112,12 @@ function registerIpc(): void {
   )
 
   ipcMain.handle(
+    IPC.resizePages,
+    (_e, indices: number[], widthMm: number, heightMm: number) =>
+      pdf.resizePages(indices, widthMm, heightMm)
+  )
+
+  ipcMain.handle(
     IPC.movePage,
     (_e, from: number, to: number) => pdf.movePage(from, to)
   )

@@ -388,6 +388,48 @@ export function rotatePages(indices: number[], delta: RotateDelta): DocumentInfo
   return getInfo()
 }
 
+/**
+ * Change the paper size of the given pages (e.g. B5 → A4). Content is uniformly
+ * scaled to fit the new box and centred; the MediaBox/CropBox are updated.
+ */
+export function resizePages(
+  indices: number[],
+  widthMm: number,
+  heightMm: number
+): DocumentInfo {
+  const d = requireDoc()
+  if (indices.length === 0) return getInfo()
+  const tW = widthMm * MM_TO_PT
+  const tH = heightMm * MM_TO_PT
+  if (tW <= 0 || tH <= 0) return getInfo()
+
+  operation('用紙サイズ変更', () => {
+    for (const i of indices) {
+      const page = d.loadPage(i)
+      const [llx, lly, urx, ury] = mediaBox(page)
+      const W = urx - llx
+      const H = ury - lly
+      if (W <= 0 || H <= 0) continue
+
+      const s = Math.min(tW / W, tH / H)
+      const tx = (tW - W * s) / 2 - llx * s
+      const ty = (tH - H * s) / 2 - lly * s
+
+      const obj = page.getObject()
+      const enc = new TextEncoder()
+      const wrapped = concatBytes([
+        enc.encode(`q ${s} 0 0 ${s} ${tx} ${ty} cm\n`),
+        readPageContents(obj),
+        enc.encode('\nQ\n')
+      ])
+      obj.put('Contents', d.addStream(wrapped, {}))
+      page.setPageBox('MediaBox', [0, 0, tW, tH])
+      page.setPageBox('CropBox', [0, 0, tW, tH])
+    }
+  })
+  return getInfo()
+}
+
 /** Move a page from one position to another, preserving the rest of the order. */
 export function movePage(from: number, to: number): DocumentInfo {
   const d = requireDoc()
