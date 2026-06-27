@@ -125,12 +125,18 @@ async function openDropped(
 }
 
 function createWindow(): BrowserWindow {
+  // Sumi-bottle app icon. Packaged: copied into resources via extraResources;
+  // dev: read from the project's build/ dir (import.meta.dirname is out/main).
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(import.meta.dirname, '../../build/icon.png')
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 900,
     minHeight: 600,
     title: '究極の墨消し',
+    icon: iconPath,
     backgroundColor: '#f4f1fb',
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),

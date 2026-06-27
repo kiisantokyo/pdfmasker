@@ -1192,7 +1192,8 @@ export function addPageNumbers(opts: PageNumberOptions): DocumentInfo {
   if (targets.length === 0) return getInfo()
 
   const fontSize = 10.5
-  const marginBottom = 13 * MM_TO_PT
+  // 8mm from the bottom edge (was 13mm) so the number clears page content.
+  const marginBottom = 8 * MM_TO_PT
   const sideMargin = 18 * MM_TO_PT
   const total = opts.startNumber + targets.length - 1
   const enc = new TextEncoder()
