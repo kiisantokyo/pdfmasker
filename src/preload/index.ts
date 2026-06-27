@@ -3,9 +3,14 @@ import { IPC } from '../shared/types'
 import type {
   BindingMarginOptions,
   DocumentInfo,
+  MetaClearResult,
+  OpenMode,
+  OpenResult,
+  PageNumberOptions,
   RedactionRect,
   RotateDelta,
   ScopedTerm,
+  StampOptions,
   TermCount,
   WordHit
 } from '../shared/types'
@@ -23,9 +28,21 @@ export interface RenderResult {
 }
 
 const api = {
+  /** App version string (e.g. "1.0.0") from package.json. */
+  appVersion: (): Promise<string> => ipcRenderer.invoke(IPC.appVersion),
   open: (): Promise<DocumentInfo | null> => ipcRenderer.invoke(IPC.open),
   openFromPath: (path: string): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.openFromPath, path),
+  /** Open / merge dropped files (PDF / Word / images) per placement mode. */
+  openFiles: (paths: string[], mode: OpenMode): Promise<OpenResult> =>
+    ipcRenderer.invoke(IPC.openFiles, paths, mode),
+  /** Close the current document and return to the welcome screen. */
+  closeDoc: (): Promise<void> => ipcRenderer.invoke(IPC.closeDoc),
+  /** Strip distribution-unsafe document properties (Info dict + XMP). */
+  clearMetadata: (): Promise<MetaClearResult> =>
+    ipcRenderer.invoke(IPC.clearMetadata),
+  /** Tell the main process whether there is unsaved work (for close-confirm). */
+  setUnsaved: (flag: boolean): void => ipcRenderer.send(IPC.unsavedState, flag),
   /** Resolve the absolute filesystem path of a dropped File. */
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   info: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.info),
@@ -92,6 +109,10 @@ const api = {
     ipcRenderer.invoke(IPC.rotatePage, index, delta),
   bindingMargin: (opts: BindingMarginOptions): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.bindingMargin, opts),
+  addPageNumbers: (opts: PageNumberOptions): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.addPageNumbers, opts),
+  addStamp: (opts: StampOptions): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.addStamp, opts),
   undo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.undo),
   redo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.redo),
   save: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.save),

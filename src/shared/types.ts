@@ -19,6 +19,12 @@ export interface DocumentInfo {
   name: string
   pageCount: number
   pages: PageInfo[]
+  /**
+   * True if the document still carries distribution-unsafe properties (a
+   * non-empty Document Info field or an XMP metadata stream). Drives the
+   * 「配布情報なし」 status badge; stays in sync through edits/undo/redo.
+   */
+  hasMetadata: boolean
 }
 
 /**
@@ -71,6 +77,34 @@ export interface ScopedTerm {
   scope?: 'all' | 'first'
 }
 
+/**
+ * Where a dropped file's content goes relative to the document already open.
+ * 'new' replaces the current document; 'before'/'after' merge the dropped
+ * pages in front of / behind the current pages.
+ */
+export type OpenMode = 'new' | 'before' | 'after'
+
+/** Result of opening/merging dropped files. */
+export interface OpenResult {
+  info: DocumentInfo
+  /**
+   * What to do about OCR after opening:
+   * - 'auto'   : images were rasterised → run OCR automatically (no prompt)
+   * - 'prompt' : a text-less PDF was opened → ask the user
+   * - 'none'   : the document already has text
+   */
+  ocr: 'auto' | 'prompt' | 'none'
+  /** Optional note for the status bar (e.g. conversion summary / skipped files). */
+  message?: string
+}
+
+/** Result of clearing document properties: which fields were actually removed. */
+export interface MetaClearResult {
+  info: DocumentInfo
+  /** Japanese labels of the properties that were present and removed. */
+  removed: string[]
+}
+
 /** Which edge the binding (staple) margin is added to. */
 export type BindingSide = 'left' | 'right' | 'top' | 'bottom'
 
@@ -84,9 +118,67 @@ export interface BindingMarginOptions {
   pageIndex: number
 }
 
+/** Which pages an operation applies to. */
+export type ApplyScope = 'all' | 'current' | 'range'
+
+/** Page-number text format (phase 1: ASCII-only, no font embedding needed). */
+export type PageNumberFormat = 'plain' | 'slash' | 'dash' | 'p-dot'
+
+/** Where the page number sits along the bottom edge. */
+export type PageNumberPosition = 'bottom-left' | 'bottom-center' | 'bottom-right'
+
+export interface PageNumberOptions {
+  format: PageNumberFormat
+  position: PageNumberPosition
+  /** Number printed on the first targeted page (e.g. 1). */
+  startNumber: number
+  scope: ApplyScope
+  /** Current page index (0-based), used when scope is 'current'. */
+  pageIndex: number
+  /** 1-based inclusive page range, used when scope is 'range'. */
+  rangeFrom: number
+  rangeTo: number
+}
+
+/** Predefined red 朱印 stamps (keys match STAMP_PNG_BASE64 / the asset script). */
+export type StampKind =
+  | 'maru-hi'
+  | 'shagaihi'
+  | 'toriatsukai-chui'
+  | 'fukusei-genkin'
+  | 'confidential'
+
+/** Labels for the stamp picker UI. */
+export const STAMP_LABELS: Record<StampKind, string> = {
+  'maru-hi': '秘',
+  shagaihi: '社外秘',
+  'toriatsukai-chui': '取扱注意',
+  'fukusei-genkin': '複製厳禁',
+  confidential: 'Confidential'
+}
+
+/** Where the stamp is placed on the page. */
+export type StampPosition = 'center' | 'top-right' | 'bottom-right'
+
+export interface StampOptions {
+  kind: StampKind
+  position: StampPosition
+  scope: ApplyScope
+  /** Current page index (0-based), used when scope is 'current'. */
+  pageIndex: number
+  /** 1-based inclusive page range, used when scope is 'range'. */
+  rangeFrom: number
+  rangeTo: number
+}
+
 export const IPC = {
+  appVersion: 'app:version',
   open: 'pdf:open',
   openFromPath: 'pdf:openFromPath',
+  openFiles: 'pdf:openFiles',
+  closeDoc: 'pdf:closeDoc',
+  clearMetadata: 'pdf:clearMetadata',
+  unsavedState: 'pdf:unsavedState',
   info: 'pdf:info',
   renderPage: 'pdf:renderPage',
   applyRedactions: 'pdf:applyRedactions',
@@ -110,6 +202,8 @@ export const IPC = {
   rotatePages: 'pdf:rotatePages',
   resizePages: 'pdf:resizePages',
   bindingMargin: 'pdf:bindingMargin',
+  addPageNumbers: 'pdf:addPageNumbers',
+  addStamp: 'pdf:addStamp',
   undo: 'pdf:undo',
   redo: 'pdf:redo',
   save: 'pdf:save',

@@ -35,6 +35,17 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
   - 検索/適用: `countTerms`（件数・0件は不一致表示）/ `findTermsScoped`（scope=all|firstを尊重）/ `findTerms` / `extractCandidates`。
   - **方針: アプリは外部送信しない。** PDFを外部AIに送るのはユーザー操作（モーダルに警告表示）。AI案は必ず一覧で人間が取捨選択。
 - 閉じ代: `addBindingMargin`（コンテンツストリームを `q s 0 0 s tx ty cm ... Q` で包んで均等縮小・シフト）。
+- ページ番号 / 赤いスタンプ: `addPageNumbers` / `addStamp`（`pdf-service.ts`、各1ジャーナル操作＝1undo）。
+  どちらも元コンテンツを `q ... Q` で囲って上に追記する方式（`addBindingMargin` と同系統）。
+  `pageVisualMatrix` で /Rotate を吸収し、視覚座標（正立ページの左下原点）に配置。`ownResources` /
+  `ownSubDict` は継承 /Resources を複製してから自前の名前（`/PMHELV` `/PMSTAMP` `/PMGS`）を足す
+  （親 Pages を破壊しない）。
+  - ページ番号: ASCII書式のみ（`1` / `1/総数` / `-1-` / `P.1`）で base-14 Helvetica（埋め込み不要）。下中央固定。
+    番号は対象ページ列の先頭=`startNumber`。UIは App.tsx の `pnOpen` モーダル。
+  - スタンプ: **案1（同梱朱印画像）**。赤ハンコPNGは `src/main/stamp-assets.ts`（base64）で、
+    `scripts/gen-stamp-assets.ps1`（System.Drawing＋日本語フォント, 純ASCII・コードポイント生成）が出力。
+    画像XObject＋ExtGStateで配置。中央=大・半透明(ca0.28)、右上/右下=小・不透明。種類/位置/対象はモーダル。
+    文字種を増やすときは ps1 を編集して再実行＋`types.ts` の `StampKind`/`STAMP_LABELS` を更新。
 - Ctrl+ホイールズーム: `components/PageCanvas.tsx`（passive:false の wheel リスナ）。
 - 連続スクロールビュー: `components/ContinuousViewer.tsx`。全ページをスタックし、IntersectionObserver で
   ①近傍ページを遅延マウント（`mounted` Set、rootMargin 500px）②最可視ページを `onVisiblePage` で currentPage に反映。
@@ -47,6 +58,13 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
   `ocr: Map<pageIndex, OcrWord[]>` にメモリ保持（`enableJournal` 対象外・保存しない）。
 - `documentText`/`wordAt`/`findWord`/`selectText` はネイティブ文字が無いとき OCR にフォールバック。
   → 検索・単語クリック・なぞり・固有名詞抽出・AI同梱がスキャンPDFでも機能。墨消し自体は画像領域の実削除。
+- `findWord` の OCR 照合は **行単位で連結したテキスト**に対して行い、ヒット範囲を構成トークンの
+  bbox に戻す（CJK は語が1文字ずつ別トークンに分割されるため。これで「山田由美」等の複数トークン語が
+  ページ横断で拾える）。正規化は NFKC＋記号/絵文字除去＋小書きかな畳み込み。
+- 既知の制約（意図的に未対応）: **装飾付き文字（例: 「シユン⭐」）はOCRの認識がインスタンスごとに
+  ブレる**（星等の影響で2〜3文字目が `シユ私る`/`シユシミ`/`シユンマ` 等になる）ため、『同語＋』では
+  拾い切れないことがある。findWord をあいまい化すると全機能で過剰墨消しのリスクがあるため厳密一致を維持し、
+  この種はなぞり選択／四角で個別に墨消しする運用とする。
 - モデルは `app.getPath('userData')/tessdata` にキャッシュ（初回のみネットワーク取得）。PDFは外部送信しない。
 - 注意: OCRランタイム（モデルDL/worker）はヘッドレスで未検証。パッケージ時は worker/core/traineddata の
   同梱（asar unpack 等）が別途必要になる見込み。
