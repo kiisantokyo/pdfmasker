@@ -4,15 +4,20 @@
 import * as mupdf from 'mupdf'
 import Tesseract from 'tesseract.js'
 import type {
+  ApplyScope,
   BindingMarginOptions,
   DocumentInfo,
   PageInfo,
+  PageNumberFormat,
+  PageNumberOptions,
   RedactionRect,
   RotateDelta,
   ScopedTerm,
+  StampOptions,
   TermCount,
   WordHit
 } from '../shared/types'
+import { STAMP_PNG_BASE64 } from './stamp-assets'
 
 let doc: mupdf.PDFDocument | null = null
 let currentPath: string | null = null
@@ -96,12 +101,47 @@ export function getInfo(): DocumentInfo {
     path: currentPath,
     name: currentName,
     pageCount: d.countPages(),
-    pages: buildPageInfo()
+    pages: buildPageInfo(),
+    hasMetadata: documentHasMetadata()
   }
+}
+
+/**
+ * True if the document still has distribution-unsafe properties: a non-empty
+ * Document Info field, or an XMP metadata stream on the catalog. Mirrors what
+ * clearMetadata() removes, so the 「配布情報なし」 badge tracks the real state.
+ */
+function documentHasMetadata(): boolean {
+  if (!doc) return false
+  const trailer = doc.getTrailer()
+  const info = trailer.get('Info')
+  if (info && info.isDictionary()) {
+    for (const [key] of INFO_LABELS) {
+      const v = info.get(key)
+      if (v && !v.isNull() && (!v.isString() || v.asString().trim() !== '')) {
+        return true
+      }
+    }
+  }
+  const root = trailer.get('Root')
+  if (root && root.isDictionary()) {
+    const md = root.get('Metadata')
+    if (md && !md.isNull()) return true
+  }
+  return false
 }
 
 export function isOpen(): boolean {
   return doc !== null
+}
+
+/** Close the current document and release its resources (back to no-doc state). */
+export function closeDocument(): void {
+  doc?.destroy?.()
+  doc = null
+  ocr = null
+  currentPath = null
+  currentName = 'untitled.pdf'
 }
 
 /** Load a PDF from raw bytes. `name`/`path` are metadata for the UI. */
@@ -127,6 +167,84 @@ export function loadDocument(
   // Enable the journal so every mutation can be undone/redone.
   pdf.enableJournal()
   return getInfo()
+}
+
+/**
+ * Merge an external PDF (given as bytes) into the open document, either before
+ * the first page or after the last. Used when the user drops a file while a
+ * document is already open and chooses "前に追加" / "後に追加". A single journal
+ * operation so the whole merge undoes/redoes atomically.
+ */
+export function insertExternalPdf(
+  bytes: Uint8Array,
+  position: 'before' | 'after'
+): DocumentInfo {
+  const d = requireDoc()
+  const opened = mupdf.Document.openDocument(bytes, 'application/pdf')
+  const src = opened.asPDF()
+  if (!src) {
+    opened.destroy?.()
+    throw new Error('取り込むファイルが有効なPDFではありません')
+  }
+  try {
+    const srcCount = src.countPages()
+    operation('ファイルの取り込み', () => {
+      if (position === 'after') {
+        for (let i = 0; i < srcCount; i++) d.graftPage(d.countPages(), src, i)
+      } else {
+        // Insert at the front, keeping the source order: 0,1,2,...
+        for (let i = 0; i < srcCount; i++) d.graftPage(i, src, i)
+      }
+    })
+  } finally {
+    src.destroy?.()
+  }
+  // Page indices shifted; any cached OCR is now misaligned. Drop it so callers
+  // can re-run OCR over the merged document if needed.
+  ocr = null
+  return getInfo()
+}
+
+const INFO_LABELS: [string, string][] = [
+  ['Title', 'タイトル'],
+  ['Author', '作成者'],
+  ['Subject', 'サブタイトル'],
+  ['Keywords', 'キーワード'],
+  ['Creator', '作成アプリ'],
+  ['Producer', 'PDF変換ソフト'],
+  ['CreationDate', '作成日時'],
+  ['ModDate', '更新日時']
+]
+
+/**
+ * Remove document properties that are unsuitable for distribution: the
+ * Document Information dictionary (Author, Title, Subject, Keywords, Creator,
+ * Producer, CreationDate, ModDate) and the XMP metadata stream. Undoable.
+ * Returns the labels of the properties that were actually present and removed.
+ */
+export function clearMetadata(): { info: DocumentInfo; removed: string[] } {
+  const d = requireDoc()
+  const removed: string[] = []
+  operation('プロパティ消去', () => {
+    const trailer = d.getTrailer()
+    const info = trailer.get('Info')
+    if (info && info.isDictionary()) {
+      for (const [key, label] of INFO_LABELS) {
+        const v = info.get(key)
+        const present =
+          v && !v.isNull() && (!v.isString() || v.asString().trim() !== '')
+        if (present) removed.push(label)
+      }
+    }
+    trailer.delete('Info')
+    const root = trailer.get('Root')
+    if (root && root.isDictionary()) {
+      const md = root.get('Metadata')
+      if (md && !md.isNull()) removed.push('XMPメタデータ')
+      root.delete('Metadata')
+    }
+  })
+  return { info: getInfo(), removed }
 }
 
 /**
@@ -368,6 +486,29 @@ export function highlightRects(rects: RedactionRect[]): DocumentInfo {
   return getInfo()
 }
 
+// Small→large kana, so OCR variants like "シュン" / "シユン" fold together.
+const SMALL_KANA = 'ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ'
+const LARGE_KANA = 'あいうえおつやゆよわアイウエオツヤユヨワ'
+
+/**
+ * Normalise a token for fuzzy OCR matching: unify full/half width (NFKC),
+ * lowercase, drop everything that isn't a letter or number (so decorations a
+ * mention picks up — '@', emoji like ⭐, spaces, punctuation — are removed), and
+ * fold small kana to large. Lets "@シュン⭐" match plain "シユン" occurrences.
+ */
+function normalizeForMatch(s: string): string {
+  const stripped = s
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+  let out = ''
+  for (const ch of stripped) {
+    const i = SMALL_KANA.indexOf(ch)
+    out += i >= 0 ? LARGE_KANA[i] : ch
+  }
+  return out
+}
+
 /** Find every occurrence of `needle` across all pages (case-insensitive). */
 export function findWord(needle: string): RedactionRect[] {
   const d = requireDoc()
@@ -387,16 +528,59 @@ export function findWord(needle: string): RedactionRect[] {
   }
   // Fallback: search OCR words when the PDF has no native text.
   if (rects.length === 0 && ocr) {
-    const low = trimmed.toLowerCase()
-    for (const [i, words] of ocr) {
-      for (const w of words) {
-        if (w.text.toLowerCase().includes(low)) {
-          rects.push({ pageIndex: i, x0: w.x0, y0: w.y0, x1: w.x1, y1: w.y1 })
+    rects.push(...ocrFindRects(normalizeForMatch(trimmed)))
+  }
+  return rects
+}
+
+/**
+ * Search the OCR layer for `target` (already normalised). CJK OCR splits words
+ * into per-character tokens ("山田由美" → 山 / 田 / 由美), so we concatenate each
+ * line's tokens into one normalised string, search within it, and map every
+ * match back to the bounding box spanning the tokens it covers. This is what
+ * makes multi-character terms findable across the whole document.
+ */
+function ocrFindRects(target: string): RedactionRect[] {
+  const out: RedactionRect[] = []
+  if (!ocr || !target) return out
+  for (const [pageIndex, words] of ocr) {
+    // Group words into lines (vertically-overlapping bands), reading order.
+    const sorted = [...words].sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)
+    const lines: OcrWord[][] = []
+    for (const w of sorted) {
+      const line = lines[lines.length - 1]
+      if (line && w.y0 < line[line.length - 1].y1) line.push(w)
+      else lines.push([w])
+    }
+    for (const line of lines) {
+      line.sort((a, b) => a.x0 - b.x0)
+      // Build the line's normalised text plus, per character, which token it came from.
+      let norm = ''
+      const owner: number[] = []
+      line.forEach((w, wi) => {
+        for (const ch of normalizeForMatch(w.text)) {
+          norm += ch
+          owner.push(wi)
         }
+      })
+      // Emit a merged box over the tokens covering each occurrence.
+      for (let idx = norm.indexOf(target); idx >= 0; idx = norm.indexOf(target, idx + 1)) {
+        let x0 = Infinity
+        let y0 = Infinity
+        let x1 = -Infinity
+        let y1 = -Infinity
+        for (let k = idx; k < idx + target.length; k++) {
+          const w = line[owner[k]]
+          x0 = Math.min(x0, w.x0)
+          y0 = Math.min(y0, w.y0)
+          x1 = Math.max(x1, w.x1)
+          y1 = Math.max(y1, w.y1)
+        }
+        out.push({ pageIndex, x0, y0, x1, y1 })
       }
     }
   }
-  return rects
+  return out
 }
 
 /** Concatenated plain text of the whole document (OCR fallback if no native text). */
@@ -647,6 +831,42 @@ export function rotatePages(indices: number[], delta: RotateDelta): DocumentInfo
  * Change the paper size of the given pages (e.g. B5 → A4). Content is uniformly
  * scaled to fit the new box and centred; the MediaBox/CropBox are updated.
  */
+/**
+ * Apply the same scale+shift used on a page's content stream to its
+ * annotations. Annotation /Rect and /QuadPoints live in the page's user space
+ * (the same space the content `cm` operates in), so the transform is applied
+ * directly — no top-left/bottom-left flip needed. This keeps yellow highlights
+ * aligned when 閉じ代 / 用紙サイズ変更 scale and move the page content.
+ */
+function transformAnnotations(
+  page: mupdf.PDFPage,
+  s: number,
+  tx: number,
+  ty: number
+): void {
+  const mapX = (x: number): number => s * x + tx
+  const mapY = (y: number): number => s * y + ty
+  for (const annot of page.getAnnotations()) {
+    const obj = annot.getObject()
+    const rect = obj.get('Rect')
+    if (rect && rect.isArray() && rect.length === 4) {
+      rect.put(0, mapX(rect.get(0).asNumber()))
+      rect.put(1, mapY(rect.get(1).asNumber()))
+      rect.put(2, mapX(rect.get(2).asNumber()))
+      rect.put(3, mapY(rect.get(3).asNumber()))
+    }
+    const qp = obj.get('QuadPoints')
+    if (qp && qp.isArray()) {
+      const n = qp.length
+      for (let k = 0; k + 1 < n; k += 2) {
+        qp.put(k, mapX(qp.get(k).asNumber()))
+        qp.put(k + 1, mapY(qp.get(k + 1).asNumber()))
+      }
+    }
+    annot.update()
+  }
+}
+
 export function resizePages(
   indices: number[],
   widthMm: number,
@@ -693,6 +913,7 @@ export function resizePages(
       obj.put('Contents', d.addStream(wrapped, {}))
       page.setPageBox('MediaBox', [0, 0, tW, tH])
       page.setPageBox('CropBox', [0, 0, tW, tH])
+      transformAnnotations(page, s, tx, ty)
     }
   })
   return getInfo()
@@ -808,9 +1029,304 @@ export function addBindingMargin(opts: BindingMarginOptions): DocumentInfo {
 
       const stream = d.addStream(wrapped, {})
       page.getObject().put('Contents', stream)
+      transformAnnotations(page, s, tx, ty)
     }
   })
 
+  return getInfo()
+}
+
+// --- Page numbers & stamps --------------------------------------------------
+
+/** Resolve which 0-based page indices an ApplyScope targets (range is 1-based,
+ *  inclusive; values are clamped to the document). */
+function resolveTargets(
+  scope: ApplyScope,
+  pageIndex: number,
+  rangeFrom: number,
+  rangeTo: number,
+  count: number
+): number[] {
+  if (scope === 'current') return [Math.max(0, Math.min(pageIndex, count - 1))]
+  if (scope === 'range') {
+    const lo = Math.max(1, Math.min(rangeFrom, rangeTo))
+    const hi = Math.min(count, Math.max(rangeFrom, rangeTo))
+    const out: number[] = []
+    for (let p = lo; p <= hi; p++) out.push(p - 1)
+    return out
+  }
+  return Array.from({ length: count }, (_, i) => i)
+}
+
+/**
+ * Matrix mapping "visual" coordinates (origin at the visually-upright page's
+ * bottom-left, y up) into the page's media space, so content drawn through it
+ * lands at the intended on-screen spot and stays upright on /Rotate pages.
+ * Also returns the visual page size.
+ */
+function pageVisualMatrix(
+  rot: number,
+  llx: number,
+  lly: number,
+  w: number,
+  h: number
+): {
+  cm: [number, number, number, number, number, number]
+  visW: number
+  visH: number
+} {
+  let cm: [number, number, number, number, number, number]
+  let visW: number
+  let visH: number
+  switch (rot) {
+    case 90:
+      cm = [0, 1, -1, 0, w, 0]
+      visW = h
+      visH = w
+      break
+    case 180:
+      cm = [-1, 0, 0, -1, w, h]
+      visW = w
+      visH = h
+      break
+    case 270:
+      cm = [0, -1, 1, 0, 0, h]
+      visW = h
+      visH = w
+      break
+    default:
+      cm = [1, 0, 0, 1, 0, 0]
+      visW = w
+      visH = h
+  }
+  cm[4] += llx
+  cm[5] += lly
+  return { cm, visW, visH }
+}
+
+/** Ensure the page owns its /Resources dict (copying inherited entries so the
+ *  parent Pages node is never mutated), and return it. */
+function ownResources(
+  d: mupdf.PDFDocument,
+  pageObj: mupdf.PDFObject
+): mupdf.PDFObject {
+  const existing = pageObj.get('Resources')
+  if (existing && existing.isDictionary()) return existing
+  const res = d.newDictionary()
+  const inherited = pageObj.getInheritable('Resources')
+  if (inherited && inherited.isDictionary()) {
+    inherited.forEach((val, key) => res.put(key as string, val))
+  }
+  pageObj.put('Resources', res)
+  return res
+}
+
+/** Return a private named sub-dict of /Resources (e.g. /Font, /XObject),
+ *  cloning any inherited/shared one so our additions never touch it. */
+function ownSubDict(
+  d: mupdf.PDFDocument,
+  res: mupdf.PDFObject,
+  name: string
+): mupdf.PDFObject {
+  const sub = d.newDictionary()
+  const existing = res.get(name)
+  if (existing && existing.isDictionary()) {
+    existing.forEach((val, key) => sub.put(key as string, val))
+  }
+  res.put(name, sub)
+  return sub
+}
+
+/** Format a PDF number compactly (no trailing zeros). */
+const fmt = (n: number): string =>
+  Number.isInteger(n) ? String(n) : Number(n.toFixed(3)).toString()
+
+/** Escape a string for a PDF literal-string operand. */
+const pdfEscape = (s: string): string => s.replace(/[\\()]/g, (c) => '\\' + c)
+
+/** Helvetica advance widths (1000-unit em) for the glyphs page numbers use. */
+const HELV_WIDTH: Record<string, number> = {
+  '0': 556, '1': 556, '2': 556, '3': 556, '4': 556, '5': 556,
+  '6': 556, '7': 556, '8': 556, '9': 556, ' ': 278, '/': 278,
+  '-': 333, P: 667, '.': 278
+}
+
+function helvWidth(text: string, size: number): number {
+  let w = 0
+  for (const ch of text) w += (HELV_WIDTH[ch] ?? 556) / 1000
+  return w * size
+}
+
+function formatPageNumber(
+  format: PageNumberFormat,
+  n: number,
+  total: number
+): string {
+  switch (format) {
+    case 'slash':
+      return `${n} / ${total}`
+    case 'dash':
+      return `- ${n} -`
+    case 'p-dot':
+      return `P.${n}`
+    default:
+      return `${n}`
+  }
+}
+
+/**
+ * Append page-number text (ASCII, base-14 Helvetica) at the bottom-centre of
+ * each targeted page. Numbers run startNumber, +1, … across the sorted targets;
+ * the "{n} / {total}" format uses the count of numbered pages as the total.
+ */
+export function addPageNumbers(opts: PageNumberOptions): DocumentInfo {
+  const d = requireDoc()
+  const count = d.countPages()
+  const targets = resolveTargets(
+    opts.scope,
+    opts.pageIndex,
+    opts.rangeFrom,
+    opts.rangeTo,
+    count
+  )
+  if (targets.length === 0) return getInfo()
+
+  const fontSize = 10.5
+  const marginBottom = 13 * MM_TO_PT
+  const sideMargin = 18 * MM_TO_PT
+  const total = opts.startNumber + targets.length - 1
+  const enc = new TextEncoder()
+
+  operation('ページ番号の付与', () => {
+    const fontRef = d.addSimpleFont(new mupdf.Font('Helvetica'))
+    for (let k = 0; k < targets.length; k++) {
+      const page = d.loadPage(targets[k])
+      const pageObj = page.getObject()
+      const [llx, lly, urx, ury] = mediaBox(page)
+      const w = urx - llx
+      const h = ury - lly
+      if (w <= 0 || h <= 0) continue
+      const { cm, visW } = pageVisualMatrix(readRotation(page), llx, lly, w, h)
+
+      const text = formatPageNumber(opts.format, opts.startNumber + k, total)
+      const tw = helvWidth(text, fontSize)
+      const tx =
+        opts.position === 'bottom-left'
+          ? sideMargin
+          : opts.position === 'bottom-right'
+            ? visW - sideMargin - tw
+            : (visW - tw) / 2
+      const ops =
+        'q\n' +
+        `${cm.map(fmt).join(' ')} cm\n` +
+        'BT\n' +
+        `/PMHELV ${fmt(fontSize)} Tf\n` +
+        '0.25 0.25 0.25 rg\n' +
+        `${fmt(tx)} ${fmt(marginBottom)} Td\n` +
+        `(${pdfEscape(text)}) Tj\n` +
+        'ET\nQ\n'
+
+      ownSubDict(d, ownResources(d, pageObj), 'Font').put('PMHELV', fontRef)
+      const wrapped = concatBytes([
+        enc.encode('q\n'),
+        readPageContents(pageObj),
+        enc.encode('\nQ\n'),
+        enc.encode(ops)
+      ])
+      pageObj.put('Contents', d.addStream(wrapped, {}))
+    }
+  })
+  return getInfo()
+}
+
+/** All stamps are translucent so underlying text stays readable; the center
+ *  watermark is the lightest. */
+const STAMP_OPACITY: Record<StampOptions['position'], number> = {
+  center: 0.25,
+  'top-right': 0.55,
+  'bottom-right': 0.55
+}
+
+/**
+ * Stamp a predefined red 朱印 (image asset) onto each targeted page. Corner
+ * stamps are small and opaque; the center stamp is large and translucent so it
+ * reads as a watermark without hiding content.
+ */
+export function addStamp(opts: StampOptions): DocumentInfo {
+  const d = requireDoc()
+  const count = d.countPages()
+  const targets = resolveTargets(
+    opts.scope,
+    opts.pageIndex,
+    opts.rangeFrom,
+    opts.rangeTo,
+    count
+  )
+  if (targets.length === 0) return getInfo()
+  const b64 = STAMP_PNG_BASE64[opts.kind]
+  if (!b64) throw new Error(`Unknown stamp kind: ${opts.kind}`)
+
+  const png = Uint8Array.from(Buffer.from(b64, 'base64'))
+  const opacity = STAMP_OPACITY[opts.position] ?? 1
+  const margin = 22
+  const enc = new TextEncoder()
+
+  operation('スタンプの付与', () => {
+    const imgRef = d.addImage(new mupdf.Image(png))
+    const gs = d.newDictionary()
+    gs.put('Type', d.newName('ExtGState'))
+    gs.put('ca', opacity)
+    gs.put('CA', opacity)
+    const gsRef = d.addObject(gs)
+
+    for (const i of targets) {
+      const page = d.loadPage(i)
+      const pageObj = page.getObject()
+      const [llx, lly, urx, ury] = mediaBox(page)
+      const w = urx - llx
+      const h = ury - lly
+      if (w <= 0 || h <= 0) continue
+      const { cm, visW, visH } = pageVisualMatrix(
+        readRotation(page),
+        llx,
+        lly,
+        w,
+        h
+      )
+
+      // Square asset → uniform scale. Place in visual space.
+      let s: number
+      let x: number
+      let y: number
+      if (opts.position === 'center') {
+        s = Math.min(visW, visH) * 0.46
+        x = (visW - s) / 2
+        y = (visH - s) / 2
+      } else {
+        s = Math.min(Math.min(visW, visH) * 0.22, 96)
+        x = visW - margin - s
+        y = opts.position === 'top-right' ? visH - margin - s : margin
+      }
+
+      const ops =
+        'q\n' +
+        `${cm.map(fmt).join(' ')} cm\n` +
+        '/PMGS gs\n' +
+        `${fmt(s)} 0 0 ${fmt(s)} ${fmt(x)} ${fmt(y)} cm\n` +
+        '/PMSTAMP Do\nQ\n'
+
+      const res = ownResources(d, pageObj)
+      ownSubDict(d, res, 'XObject').put('PMSTAMP', imgRef)
+      ownSubDict(d, res, 'ExtGState').put('PMGS', gsRef)
+      const wrapped = concatBytes([
+        enc.encode('q\n'),
+        readPageContents(pageObj),
+        enc.encode('\nQ\n'),
+        enc.encode(ops)
+      ])
+      pageObj.put('Contents', d.addStream(wrapped, {}))
+    }
+  })
   return getInfo()
 }
 
