@@ -5,7 +5,7 @@
   "description": "究極の墨消し — 真の墨消し（下のデータを完全削除）とページ編集ができるデスクトップPDFアプリ",
   "main": "out/main/index.js",
   "author": "",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "private": true,
   "type": "module",
   "scripts": {
@@ -43,7 +43,14 @@
     "directories": {
       "output": "release"
     },
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "portable"
       ]
