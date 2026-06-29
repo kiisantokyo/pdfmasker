@@ -106,3 +106,11 @@ Unrelated to other projects in this workspace (e.g. Mints Party Manager).
 - `ELECTRON_RUN_AS_NODE=1` in some shells makes `electron` resolve to the npm
   path stub (not the built-in module) → `app` is undefined. Unset it to run GUI.
   (Not present in a normal user terminal.)
+
+## Secrets & infra (Cosmo Infrastructure constitution)
+- Secrets (keys / passwords / API keys / license keys / connection info) live ONLY
+  in 1Password (single source of truth). Never commit values to Git — only
+  `.env.example` / `*.tpl` with key names (empty/dummy values).
+- `secret-scan` (gitleaks) CI detects accidental secret commits (added to this repo).
+- This is a desktop (Electron) app, so the VPS / systemd / backup server standards
+  do not apply here; see the `cosmo-infrastructure` constitution for server-side details.
