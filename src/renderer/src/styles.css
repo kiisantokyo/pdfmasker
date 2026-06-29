@@ -40,12 +40,21 @@ body {
 /* Toolbar */
 .toolbar {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 7px;
   padding: 8px 10px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
+}
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
+}
+.toolbar-row + .toolbar-row {
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
 }
 
 .toolbar button {
@@ -149,6 +158,10 @@ body {
 }
 .toolbar .spacer {
   flex: 1;
+}
+.ico-binding {
+  vertical-align: -3px;
+  margin-right: 4px;
 }
 .zoom {
   display: flex;
@@ -383,32 +396,140 @@ body {
   color: var(--muted);
 }
 
-.empty {
+/* Welcome / empty state */
+.welcome {
   margin: auto;
-  text-align: center;
-  max-width: 440px;
-  color: var(--muted);
+  width: 100%;
+  max-width: 760px;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 12px 16px 36px;
 }
-.empty h1 {
+.welcome-head {
+  text-align: center;
+}
+.welcome-head h1 {
+  margin: 0 0 8px;
+  font-size: 30px;
+  letter-spacing: 0.04em;
   color: var(--text);
 }
-.empty button {
-  margin-top: 12px;
+.welcome-tag {
+  margin: 0 auto 20px;
+  max-width: 580px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.welcome-tag b {
+  color: var(--accent);
+}
+.welcome-open {
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
-  padding: 10px 18px;
-  font-size: 14px;
+  border-radius: 10px;
+  padding: 12px 30px;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 8px 20px rgba(124, 92, 214, 0.32);
+  transition: background 0.15s, transform 0.05s;
 }
-.empty button:hover {
+.welcome-open:hover {
   background: #6a49c7;
 }
-.empty-hint {
+.welcome-open:active {
+  transform: translateY(1px);
+}
+.welcome-drop {
+  margin: 14px 0 0;
   font-size: 12px;
   color: var(--muted);
-  margin-top: 18px;
+}
+.welcome-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.welcome-card {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 16px 20px;
+  text-align: center;
+}
+.welcome-card-icon {
+  width: 46px;
+  height: 46px;
+  line-height: 46px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 20px;
+}
+.welcome-card h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+.welcome-card p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.welcome-note {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 14px;
+  padding: 16px 18px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.85;
+}
+.welcome-note strong {
+  color: var(--accent);
+}
+.welcome-note b {
+  color: var(--text);
+  font-weight: 700;
+}
+.welcome-footer {
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.9;
+}
+.welcome-footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.welcome-build {
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.welcome-footer a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 980px) {
+  .welcome-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 680px) {
+  .welcome-cards {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Drag & drop overlay */
@@ -418,25 +539,32 @@ body {
   z-index: 100;
   background: rgba(124, 92, 214, 0.18);
   backdrop-filter: blur(1px);
+  /* The dashed zone fills the window (minus a margin) so it's clear the whole
+     window accepts the drop, not just a small central box. */
+  padding: 28px;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   pointer-events: none;
 }
 .drop-overlay-inner {
-  border: 3px dashed var(--accent);
-  border-radius: 16px;
-  background: rgba(248, 245, 253, 0.95);
+  flex: 1;
+  border: 4px dashed var(--accent);
+  border-radius: 20px;
+  background: rgba(248, 245, 253, 0.92);
   color: var(--accent);
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 700;
-  padding: 48px 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   box-shadow: 0 10px 40px rgba(80, 60, 130, 0.25);
 }
 .drop-icon {
-  font-size: 40px;
-  margin-bottom: 8px;
+  font-size: 56px;
+  margin-bottom: 12px;
 }
 
 /* Word click menu */
@@ -567,6 +695,18 @@ body {
   color: #fff;
   border-color: var(--accent);
 }
+.stamp-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+.stamp-btn {
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.stamp-btn.active {
+  color: #fff;
+}
 .mm-row {
   display: flex;
   align-items: center;
@@ -617,6 +757,92 @@ body {
 .modal-primary:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Properties-cleared list */
+.meta-list {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+/* Split save button (保存 + ▼ dropdown) */
+.split-btn {
+  position: relative;
+  display: inline-flex;
+}
+.split-btn .split-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.split-btn .split-caret {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px;
+  padding-left: 7px;
+  padding-right: 7px;
+  font-size: 9px;
+}
+.split-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  min-width: 180px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.split-menu button {
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.split-menu button:hover {
+  background: rgba(124, 92, 211, 0.12);
+}
+
+/* File-placement chooser (drop while a document is open) */
+.place-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+.place-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  cursor: pointer;
+}
+.place-btn:hover {
+  border-color: var(--accent);
+  background: rgba(124, 92, 211, 0.08);
+}
+.place-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.place-sub {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* Redact-by-terms modal */
@@ -808,13 +1034,73 @@ body {
   background: var(--accent);
   transition: width 0.2s;
 }
+/* Indeterminate "still working" sweep when there is no percentage to show. */
+.ocr-bar-indeterminate {
+  width: 40%;
+  animation: ocr-sweep 1.1s ease-in-out infinite;
+}
+@keyframes ocr-sweep {
+  0% {
+    margin-left: -40%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
 
 /* Status bar */
 .statusbar {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 12px;
   padding: 6px 12px;
   background: var(--panel);
   border-top: 1px solid var(--border);
   color: var(--muted);
+}
+.status-msg {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status-ver {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.status-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.status-item {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.badge-unsaved {
+  background: #fbe6c8;
+  color: #9a5a12;
+}
+.badge-clean {
+  background: var(--accent-soft);
+  color: var(--accent);
 }

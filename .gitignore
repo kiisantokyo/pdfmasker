@@ -9,3 +9,6 @@ release
 .env
 .env.*
 !.env.example
+
+# Redaction output sample (generated artifact)
+demo/redacted.pdf
