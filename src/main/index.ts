@@ -13,6 +13,7 @@ import type {
   StampOptions
 } from '../shared/types'
 import * as pdf from './pdf-service'
+import * as license from './license-service'
 import { imagesToPdf, isImagePath } from './convert-image'
 import { isWordPath, wordToPdf } from './convert-word'
 
@@ -97,11 +98,11 @@ async function openDropped(
     if (isWordPath(target)) {
       bytes = await wordToPdf(target)
       name = baseNoExt(target) + '.pdf'
-    } else if (target.toLowerCase().endsWith('.pdf')) {
+    } else {
+      // Anything else is tried as a PDF by content — the extension does not
+      // have to be .pdf (loadDocument validates the bytes and errors if not).
       bytes = new Uint8Array(await readFile(target))
       name = basename(target)
-    } else {
-      throw new Error('対応していないファイル形式です')
     }
     meta = { kind: 'file', base: baseNoExt(target), dir: dirname(target) }
     if (paths.length > 1) {
@@ -192,18 +193,24 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.open, async () => {
     const result = await dialog.showOpenDialog({
-      title: 'Open PDF',
-      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      title: 'ファイルを開く',
+      // No extension restriction. PDF / Word / images are converted as needed;
+      // anything else is attempted as a PDF by content (see openDropped).
+      filters: [
+        { name: 'すべてのファイル', extensions: ['*'] },
+        {
+          name: '対応ファイル（PDF / Word / 画像）',
+          extensions: [
+            'pdf', 'doc', 'docx', 'docm', 'rtf',
+            'png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp', 'tif', 'tiff'
+          ]
+        }
+      ],
       properties: ['openFile']
     })
     if (result.canceled || result.filePaths.length === 0) return null
-    const path = result.filePaths[0]
-    const bytes = await readFile(path)
-    // currentPath stays null so 保存 won't overwrite the original; the redacted
-    // output is saved as a 「（墨消し）」 copy in the same folder by default.
-    const info = pdf.loadDocument(new Uint8Array(bytes), basename(path), null)
-    openMeta = { kind: 'file', base: baseNoExt(path), dir: dirname(path) }
-    return info
+    // Route through the same pipeline as drag-and-drop so Word/images open too.
+    return openDropped([result.filePaths[0]], 'new')
   })
 
   ipcMain.handle(IPC.openFromPath, async (_e, path: string) => {
@@ -217,7 +224,10 @@ function registerIpc(): void {
     openDropped(paths, mode)
   )
 
-  ipcMain.handle(IPC.clearMetadata, () => pdf.clearMetadata())
+  ipcMain.handle(IPC.clearMetadata, (_e, keys: string[]) =>
+    pdf.clearMetadata(keys)
+  )
+  ipcMain.handle(IPC.readMetadata, () => pdf.readMetadata())
 
   ipcMain.handle(IPC.closeDoc, () => {
     pdf.closeDocument()
@@ -335,6 +345,9 @@ function registerIpc(): void {
   ipcMain.handle(IPC.hasUnsavedChanges, () => pdf.hasUnsavedChanges())
 
   ipcMain.handle(IPC.save, async () => {
+    // 案1 保存ゲート: the redacted output is the product's value, so 保存／
+    // 書き出し is what the trial gates. canSave is the single source of truth.
+    if (!license.getState().canSave) return { saved: false, gated: true }
     const path = pdf.getPath()
     if (!path) return { saved: false, needsPath: true }
     await writeFile(path, pdf.saveToBuffer())
@@ -343,6 +356,7 @@ function registerIpc(): void {
   })
 
   ipcMain.handle(IPC.saveAs, async () => {
+    if (!license.getState().canSave) return { saved: false, gated: true }
     // Always propose the rule-based name in the source folder. `current` (a path
     // from a previous save) is only used for plain 上書き保存, not as the default.
     const result = await dialog.showSaveDialog({
@@ -355,6 +369,13 @@ function registerIpc(): void {
     pdf.markSavedAt(result.filePath)
     return { saved: true, path: result.filePath }
   })
+
+  // --- License (シリアルキー + 30日試用) ---------------------------------
+  ipcMain.handle(IPC.licenseStatus, () => license.getState())
+  ipcMain.handle(IPC.licenseActivate, (_e, key: string) =>
+    license.activate(key)
+  )
+  ipcMain.handle(IPC.licenseDeactivate, () => license.deactivate())
 }
 
 app.whenReady().then(() => {

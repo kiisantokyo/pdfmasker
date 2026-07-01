@@ -220,9 +220,9 @@ export default function Toolbar(props: Props): React.JSX.Element {
         <button
           onClick={props.onClearMetadata}
           disabled={d}
-          title="作成者・作成日時・作成アプリ名などの文書プロパティ（XMP含む）を削除します"
+          title="作成者・作成日時・作成アプリ名などの文書プロパティ（XMP含む）を確認し、消去します"
         >
-          プロパティ消去
+          プロパティ確認・消去
         </button>
 
         <span className="sep" />

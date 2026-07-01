@@ -3,6 +3,8 @@ import type {
   ApplyScope,
   BindingSide,
   DocumentInfo,
+  LicenseState,
+  MetadataEntry,
   PageNumberFormat,
   PageNumberPosition,
   RedactionRect,
@@ -12,11 +14,13 @@ import type {
   StampPosition
 } from '@shared/types'
 import { STAMP_LABELS } from '@shared/types'
-import { pdfApi } from './lib/api'
+import { licenseApi, pdfApi } from './lib/api'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
 import ContinuousViewer from './components/ContinuousViewer'
 import RedactByTermsModal from './components/RedactByTermsModal'
+import TrialBanner from './components/TrialBanner'
+import LicenseDialog from './components/LicenseDialog'
 
 // Auto build stamp (date + git commit), injected at build time. Lets every
 // build be told apart without manually bumping the version number.
@@ -49,9 +53,13 @@ export default function App(): React.JSX.Element {
   const [sidebarW, setSidebarW] = useState(210)
   // App version (package.json), shown in the welcome screen and status bar.
   const [appVersion, setAppVersion] = useState('')
+  // License / 30-day trial state (single source of truth = main process).
+  const [license, setLicense] = useState<LicenseState | null>(null)
+  const [licenseOpen, setLicenseOpen] = useState(false)
 
   useEffect(() => {
     void pdfApi.appVersion().then(setAppVersion)
+    void licenseApi.status().then(setLicense)
   }, [])
 
   const startResize = (e: React.PointerEvent): void => {
@@ -112,8 +120,12 @@ export default function App(): React.JSX.Element {
   const [processing, setProcessing] = useState<string | null>(null)
   // Confirm before overwriting an existing file via plain 保存.
   const [overwriteConfirm, setOverwriteConfirm] = useState(false)
-  // Result of プロパティ消去 (null = dialog hidden), shown to confirm the action.
-  const [metaCleared, setMetaCleared] = useState<string[] | null>(null)
+  // 文書プロパティの確認・消去ダイアログ
+  const [metaOpen, setMetaOpen] = useState(false)
+  const [metaEntries, setMetaEntries] = useState<MetadataEntry[]>([])
+  const [metaCleared, setMetaCleared] = useState(false)
+  // Which property keys are checked for removal (defaults to all on open).
+  const [metaSelected, setMetaSelected] = useState<Set<string>>(new Set())
   // Confirm before closing a document with unsaved work.
   const [closeConfirm, setCloseConfirm] = useState(false)
 
@@ -205,10 +217,12 @@ export default function App(): React.JSX.Element {
 
   const open = (): Promise<void> =>
     run(async () => {
-      const info = await pdfApi.open()
-      if (!info) return
-      applyOpened(info)
-      if (await pdfApi.needsOcr()) setOcrPrompt(true)
+      const res = await pdfApi.open()
+      if (!res) return
+      applyOpened(res.info)
+      if (res.message) setStatus(res.message)
+      if (res.ocr === 'auto') await runOcr()
+      else if (res.ocr === 'prompt') setOcrPrompt(true)
     }, '開く')
 
   const runOcr = (): Promise<void> =>
@@ -271,15 +285,38 @@ export default function App(): React.JSX.Element {
     [run, applyOpened, pushHist, pending, navigateTo, runOcr]
   )
 
+  const openProperties = (): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      const entries = await pdfApi.readMetadata()
+      setMetaEntries(entries)
+      // Pre-check every property so the common "clear all" is one click away.
+      setMetaSelected(new Set(entries.map((m) => m.key)))
+      setMetaCleared(false)
+      setMetaOpen(true)
+    }, 'プロパティ確認')
+
   const clearMetadata = (): Promise<void> =>
     run(async () => {
       if (!doc) return
-      const res = await pdfApi.clearMetadata()
+      const keys = metaEntries
+        .map((m) => m.key)
+        .filter((k) => metaSelected.has(k))
+      if (keys.length === 0) return
+      const res = await pdfApi.clearMetadata(keys)
       pushHist(true, pending, pending)
       setDoc(res.info)
       setDirty(true)
       setRefreshKey((k) => k + 1)
-      setMetaCleared(res.removed)
+      // Drop the cleared rows from the viewer; keep any left unchecked.
+      const removedKeys = new Set(keys)
+      setMetaEntries((prev) => prev.filter((m) => !removedKeys.has(m.key)))
+      setMetaSelected((prev) => {
+        const next = new Set(prev)
+        for (const k of keys) next.delete(k)
+        return next
+      })
+      setMetaCleared(true)
       setStatus(
         res.removed.length
           ? `文書プロパティを消去しました（${res.removed.join('・')}）。`
@@ -488,9 +525,22 @@ export default function App(): React.JSX.Element {
       setStatus(`ページを ${to + 1} 番目に移動しました。`)
     }, 'ページ移動')
 
+  // The trial-expired prompt: refresh state, open the license dialog, explain.
+  const onSaveGated = useCallback(() => {
+    void licenseApi.status().then(setLicense)
+    setLicenseOpen(true)
+    setStatus(
+      '試用期間が終了しました。保存・書き出しを続けるにはライセンスキーが必要です。'
+    )
+  }, [])
+
   const save = (): Promise<void> =>
     run(async () => {
       const res = await pdfApi.save()
+      if (res.gated) {
+        onSaveGated()
+        return
+      }
       if (res.needsPath) {
         await saveAs()
         return
@@ -531,6 +581,10 @@ export default function App(): React.JSX.Element {
   const saveAs = (): Promise<void> =>
     run(async () => {
       const res = await pdfApi.saveAs()
+      if (res.gated) {
+        onSaveGated()
+        return
+      }
       if (res.saved) {
         setDirty(false)
         if (doc) setDoc({ ...doc, path: res.path ?? doc.path })
@@ -837,32 +891,81 @@ export default function App(): React.JSX.Element {
         </div>
       )}
 
-      {metaCleared && (
-        <div className="modal-backdrop" onClick={() => setMetaCleared(null)}>
+      {metaOpen && (
+        <div className="modal-backdrop" onClick={() => setMetaOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>プロパティを消去しました</h2>
-            {metaCleared.length > 0 ? (
+            <h2>文書プロパティの確認・消去</h2>
+            <p className="modal-desc">
+              作成者・作成日時・作成アプリ名など、配布時に残したくない情報です。
+              消したいものにチェックを入れて「選択したものを消去」を押してください
+              （元に戻すで復元可）。
+            </p>
+
+            {metaEntries.length > 0 ? (
               <>
-                <p className="modal-desc">
-                  次の文書プロパティを削除しました：
-                </p>
-                <ul className="meta-list">
-                  {metaCleared.map((m) => (
-                    <li key={m}>{m}</li>
-                  ))}
-                </ul>
+                <label className="meta-selall">
+                  <input
+                    type="checkbox"
+                    checked={metaSelected.size === metaEntries.length}
+                    ref={(el) => {
+                      if (el)
+                        el.indeterminate =
+                          metaSelected.size > 0 &&
+                          metaSelected.size < metaEntries.length
+                    }}
+                    onChange={(e) =>
+                      setMetaSelected(
+                        e.target.checked
+                          ? new Set(metaEntries.map((m) => m.key))
+                          : new Set()
+                      )
+                    }
+                  />
+                  すべて選択（{metaSelected.size} / {metaEntries.length}）
+                </label>
+                <table className="meta-table">
+                  <tbody>
+                    {metaEntries.map((m) => (
+                      <tr key={m.key}>
+                        <td className="meta-check">
+                          <input
+                            type="checkbox"
+                            checked={metaSelected.has(m.key)}
+                            onChange={(e) =>
+                              setMetaSelected((prev) => {
+                                const next = new Set(prev)
+                                if (e.target.checked) next.add(m.key)
+                                else next.delete(m.key)
+                                return next
+                              })
+                            }
+                          />
+                        </td>
+                        <th>{m.label}</th>
+                        <td>{m.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </>
             ) : (
-              <p className="modal-desc">
-                削除対象の文書プロパティ（作成者・作成日時・XMPなど）はありませんでした。
+              <p className="meta-empty">
+                {metaCleared
+                  ? '✓ 選択したプロパティを消去しました。'
+                  : '✓ このファイルに、配布時に残したくないプロパティはありません。'}
               </p>
             )}
+
             <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setMetaOpen(false)}>
+                閉じる
+              </button>
               <button
-                className="modal-primary"
-                onClick={() => setMetaCleared(null)}
+                className="modal-primary danger"
+                onClick={clearMetadata}
+                disabled={busy || metaSelected.size === 0}
               >
-                OK
+                選択したものを消去
               </button>
             </div>
           </div>
@@ -1309,6 +1412,16 @@ export default function App(): React.JSX.Element {
         </div>
       )}
 
+      {licenseOpen && (
+        <LicenseDialog
+          state={license}
+          onClose={() => setLicenseOpen(false)}
+          onChange={(s) => setLicense(s)}
+        />
+      )}
+
+      <TrialBanner state={license} onOpenDialog={() => setLicenseOpen(true)} />
+
       <Toolbar
         hasDoc={!!doc}
         pendingCount={pending.length}
@@ -1338,7 +1451,7 @@ export default function App(): React.JSX.Element {
         onPageNumbers={() => setPnOpen(true)}
         onStamp={() => setStampOpen(true)}
         onResizePage={() => setResizeOpen(true)}
-        onClearMetadata={clearMetadata}
+        onClearMetadata={openProperties}
         onDeletePage={deletePage}
         onMoveUp={() => move(-1)}
         onMoveDown={() => move(1)}
@@ -1470,9 +1583,20 @@ export default function App(): React.JSX.Element {
             {(dirty || pending.length > 0) && (
               <span className="badge badge-unsaved">● 未保存</span>
             )}
-            {!doc.hasMetadata && (
-              <span className="badge badge-clean" title="作成者・日時・XMP等の配布に適さない情報がありません">
-                ✓ 配布情報なし
+            {doc.hasMetadata ? (
+              <button
+                className="badge badge-warn"
+                title="作成者・作成日時・作成アプリ名などの情報が含まれています。クリックで内容を確認・消去できます"
+                onClick={openProperties}
+              >
+                ⚠ プロパティあり
+              </button>
+            ) : (
+              <span
+                className="badge badge-clean"
+                title="作成者・作成日時・作成アプリ名などの情報はありません"
+              >
+                ✓ プロパティなし
               </span>
             )}
             {pending.length > 0 && (

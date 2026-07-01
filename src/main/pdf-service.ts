@@ -7,6 +7,7 @@ import type {
   ApplyScope,
   BindingMarginOptions,
   DocumentInfo,
+  MetadataEntry,
   PageInfo,
   PageNumberFormat,
   PageNumberOptions,
@@ -217,34 +218,86 @@ const INFO_LABELS: [string, string][] = [
 ]
 
 /**
- * Remove document properties that are unsuitable for distribution: the
- * Document Information dictionary (Author, Title, Subject, Keywords, Creator,
- * Producer, CreationDate, ModDate) and the XMP metadata stream. Undoable.
+ * Remove the selected document properties. `keys` holds Info-dict field names
+ * (Author, Title, …) and/or the sentinel 'XMP' for the metadata stream; only
+ * those are deleted, so the user can keep some and drop others. Undoable.
  * Returns the labels of the properties that were actually present and removed.
  */
-export function clearMetadata(): { info: DocumentInfo; removed: string[] } {
+export function clearMetadata(keys: string[]): {
+  info: DocumentInfo
+  removed: string[]
+} {
   const d = requireDoc()
   const removed: string[] = []
+  const want = new Set(keys)
   operation('プロパティ消去', () => {
     const trailer = d.getTrailer()
     const info = trailer.get('Info')
     if (info && info.isDictionary()) {
       for (const [key, label] of INFO_LABELS) {
+        if (!want.has(key)) continue
         const v = info.get(key)
         const present =
           v && !v.isNull() && (!v.isString() || v.asString().trim() !== '')
-        if (present) removed.push(label)
+        if (present) {
+          removed.push(label)
+          info.delete(key)
+        }
       }
     }
-    trailer.delete('Info')
-    const root = trailer.get('Root')
-    if (root && root.isDictionary()) {
-      const md = root.get('Metadata')
-      if (md && !md.isNull()) removed.push('XMPメタデータ')
-      root.delete('Metadata')
+    if (want.has('XMP')) {
+      const root = trailer.get('Root')
+      if (root && root.isDictionary()) {
+        const md = root.get('Metadata')
+        if (md && !md.isNull()) removed.push('XMPメタデータ')
+        root.delete('Metadata')
+      }
     }
   })
   return { info: getInfo(), removed }
+}
+
+/** Format a PDF date string (D:YYYYMMDDHHmmSS...) as "YYYY-MM-DD HH:mm". */
+function formatPdfDate(s: string): string {
+  const m = /(\d{4})(\d{2})(\d{2})(\d{2})?(\d{2})?/.exec(s)
+  if (!m) return s
+  const [, y, mo, d, h, mi] = m
+  return h ? `${y}-${mo}-${d} ${h}:${mi ?? '00'}` : `${y}-${mo}-${d}`
+}
+
+/**
+ * List the document properties currently embedded (Info-dict fields + whether
+ * an XMP stream is present), with human-readable values. Mirrors what
+ * clearMetadata() removes so the viewer shows exactly what can be cleared.
+ */
+export function readMetadata(): MetadataEntry[] {
+  if (!doc) return []
+  const out: MetadataEntry[] = []
+  const trailer = doc.getTrailer()
+  const info = trailer.get('Info')
+  if (info && info.isDictionary()) {
+    for (const [key, label] of INFO_LABELS) {
+      const v = info.get(key)
+      if (!v || !v.isString()) continue
+      const raw = v.asString().trim()
+      if (!raw) continue
+      const value =
+        key === 'CreationDate' || key === 'ModDate' ? formatPdfDate(raw) : raw
+      out.push({ key, label, value })
+    }
+  }
+  const root = trailer.get('Root')
+  if (root && root.isDictionary()) {
+    const md = root.get('Metadata')
+    if (md && !md.isNull()) {
+      out.push({
+        key: 'XMP',
+        label: 'XMPメタデータ',
+        value: 'あり（作成情報などの詳細データ）'
+      })
+    }
+  }
+  return out
 }
 
 /**

@@ -1,9 +1,12 @@
 import { clipboard, contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from '../shared/types'
 import type {
+  ActivateResult,
   BindingMarginOptions,
   DocumentInfo,
+  LicenseState,
   MetaClearResult,
+  MetadataEntry,
   OpenMode,
   OpenResult,
   PageNumberOptions,
@@ -19,6 +22,8 @@ export interface SaveResult {
   saved: boolean
   path?: string
   needsPath?: boolean
+  /** Blocked by the 案1 save gate (trial over, no valid key). */
+  gated?: boolean
 }
 
 export interface RenderResult {
@@ -30,7 +35,7 @@ export interface RenderResult {
 const api = {
   /** App version string (e.g. "1.0.0") from package.json. */
   appVersion: (): Promise<string> => ipcRenderer.invoke(IPC.appVersion),
-  open: (): Promise<DocumentInfo | null> => ipcRenderer.invoke(IPC.open),
+  open: (): Promise<OpenResult | null> => ipcRenderer.invoke(IPC.open),
   openFromPath: (path: string): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.openFromPath, path),
   /** Open / merge dropped files (PDF / Word / images) per placement mode. */
@@ -39,8 +44,11 @@ const api = {
   /** Close the current document and return to the welcome screen. */
   closeDoc: (): Promise<void> => ipcRenderer.invoke(IPC.closeDoc),
   /** Strip distribution-unsafe document properties (Info dict + XMP). */
-  clearMetadata: (): Promise<MetaClearResult> =>
-    ipcRenderer.invoke(IPC.clearMetadata),
+  clearMetadata: (keys: string[]): Promise<MetaClearResult> =>
+    ipcRenderer.invoke(IPC.clearMetadata, keys),
+  /** List the document properties currently embedded (for the viewer). */
+  readMetadata: (): Promise<MetadataEntry[]> =>
+    ipcRenderer.invoke(IPC.readMetadata),
   /** Tell the main process whether there is unsaved work (for close-confirm). */
   setUnsaved: (flag: boolean): void => ipcRenderer.send(IPC.unsavedState, flag),
   /** Resolve the absolute filesystem path of a dropped File. */
@@ -123,4 +131,19 @@ const api = {
 
 export type PdfApi = typeof api
 
+// License bridge (シリアルキー + 30日試用). Separate namespace from pdf.
+const license = {
+  /** Current license/trial state — drives the banner and the save gate. */
+  status: (): Promise<LicenseState> => ipcRenderer.invoke(IPC.licenseStatus),
+  /** Activate a serial key on this device. */
+  activate: (key: string): Promise<ActivateResult> =>
+    ipcRenderer.invoke(IPC.licenseActivate, key),
+  /** Release this device's activation (move to another PC). */
+  deactivate: (): Promise<LicenseState> =>
+    ipcRenderer.invoke(IPC.licenseDeactivate)
+}
+
+export type LicenseApi = typeof license
+
 contextBridge.exposeInMainWorld('pdf', api)
+contextBridge.exposeInMainWorld('license', license)

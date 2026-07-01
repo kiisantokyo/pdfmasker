@@ -105,6 +105,16 @@ export interface MetaClearResult {
   removed: string[]
 }
 
+/** One embedded document property, for the properties viewer. */
+export interface MetadataEntry {
+  /** Info-dict key (e.g. 'Author') or 'XMP'. */
+  key: string
+  /** Japanese label shown to the user. */
+  label: string
+  /** Human-readable value (dates are formatted). */
+  value: string
+}
+
 /** Which edge the binding (staple) margin is added to. */
 export type BindingSide = 'left' | 'right' | 'top' | 'bottom'
 
@@ -171,6 +181,43 @@ export interface StampOptions {
   rangeTo: number
 }
 
+/**
+ * License lifecycle, computed by license-service (single source of truth for
+ * the save gate). 'trial' = within the 30-day trial; 'trial_expired' = trial
+ * over and no valid key; 'active' = a valid key is activated; 'grace' = active
+ * but awaiting a routine online re-check; 'revoked' = a previously-activated
+ * key is no longer valid (refund/disable) and the trial is also over.
+ */
+export type LicenseKind =
+  | 'trial'
+  | 'trial_expired'
+  | 'active'
+  | 'grace'
+  | 'revoked'
+
+export interface LicenseState {
+  kind: LicenseKind
+  /** Whole days left in the trial (only when kind === 'trial'). */
+  trialDaysLeft?: number
+  /** License expiry ISO date, or null for a perpetual (buy-once) key. */
+  expiresAt?: string | null
+  /**
+   * The save gate (案1「保存ゲート」): whether 保存／書き出し is permitted.
+   * true during the trial and while licensed; false once the trial expires.
+   */
+  canSave: boolean
+  /** Short message for the trial banner / dialog. */
+  message?: string
+}
+
+/** Result of a key activation attempt. */
+export interface ActivateResult {
+  ok: boolean
+  state: LicenseState
+  /** Human-readable failure reason (Japanese) when ok === false. */
+  error?: string
+}
+
 export const IPC = {
   appVersion: 'app:version',
   open: 'pdf:open',
@@ -178,6 +225,7 @@ export const IPC = {
   openFiles: 'pdf:openFiles',
   closeDoc: 'pdf:closeDoc',
   clearMetadata: 'pdf:clearMetadata',
+  readMetadata: 'pdf:readMetadata',
   unsavedState: 'pdf:unsavedState',
   info: 'pdf:info',
   renderPage: 'pdf:renderPage',
@@ -208,5 +256,8 @@ export const IPC = {
   redo: 'pdf:redo',
   save: 'pdf:save',
   saveAs: 'pdf:saveAs',
-  hasUnsavedChanges: 'pdf:hasUnsavedChanges'
+  hasUnsavedChanges: 'pdf:hasUnsavedChanges',
+  licenseStatus: 'license:status',
+  licenseActivate: 'license:activate',
+  licenseDeactivate: 'license:deactivate'
 } as const
