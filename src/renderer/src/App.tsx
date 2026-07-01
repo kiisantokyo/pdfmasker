@@ -324,18 +324,22 @@ export default function App(): React.JSX.Element {
       )
     }, 'プロパティ消去')
 
-  const applyRedactions = (): Promise<void> =>
+  const applyRedactions = (fill: 'black' | 'white' = 'black'): Promise<void> =>
     run(async () => {
       if (pending.length === 0) return
-      const info = await pdfApi.applyRedactions(pending)
+      const info = await pdfApi.applyRedactions(pending, fill)
       pushHist(true, pending, [])
       setDoc(info)
       const removed = pending.length
       setPending([])
       setDirty(true)
       setRefreshKey((k) => k + 1)
-      setStatus(`${removed} 箇所を墨消ししました（下の文字・画像を削除）。`)
-    }, '墨消しの適用')
+      setStatus(
+        fill === 'white'
+          ? `${removed} 箇所を白塗りしました（下の文字・画像を削除）。`
+          : `${removed} 箇所を墨消ししました（下の文字・画像を削除）。`
+      )
+    }, fill === 'white' ? '白塗りの適用' : '墨消しの適用')
 
   const applyHighlight = (): Promise<void> =>
     run(async () => {
@@ -1132,17 +1136,19 @@ export default function App(): React.JSX.Element {
 
             <div className="field">
               <span className="field-label">用紙サイズ</span>
-              <select
-                className="text-input"
-                value={resizePaper}
-                onChange={(e) => setResizePaper(e.target.value)}
-              >
+              <div className="side-grid">
                 {PAPER_SIZES.map((p) => (
-                  <option key={p.name} value={p.name}>
+                  <button
+                    key={p.name}
+                    className={
+                      'side-btn' + (resizePaper === p.name ? ' active' : '')
+                    }
+                    onClick={() => setResizePaper(p.name)}
+                  >
                     {p.name}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
             <p className="modal-desc" style={{ margin: '0 0 12px' }}>
@@ -1434,7 +1440,8 @@ export default function App(): React.JSX.Element {
         }
         onOpen={open}
         onClose={closeFile}
-        onRedact={applyRedactions}
+        onRedact={() => applyRedactions('black')}
+        onWhiteFill={() => applyRedactions('white')}
         onHighlight={applyHighlight}
         onExpandSameWord={expandSameWord}
         canExpand={lastSelText.trim().length > 0}

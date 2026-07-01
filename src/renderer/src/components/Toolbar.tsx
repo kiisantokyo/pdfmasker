@@ -16,6 +16,7 @@ interface Props {
   onOpen: () => void
   onClose: () => void
   onRedact: () => void
+  onWhiteFill: () => void
   onHighlight: () => void
   onExpandSameWord: () => void
   canExpand: boolean
@@ -87,6 +88,15 @@ export default function Toolbar(props: Props): React.JSX.Element {
           title="選択した範囲の下にある文字・画像を完全に削除します"
         >
           <span className="act-icon">■</span>墨
+          <span className="act-count">{pendingCount}</span>
+        </button>
+        <button
+          className="act act-white"
+          onClick={props.onWhiteFill}
+          disabled={d || pendingCount === 0}
+          title="選択した範囲の下にある文字・画像を完全に削除し、白で塗りつぶします"
+        >
+          <span className="act-icon">▢</span>白
           <span className="act-count">{pendingCount}</span>
         </button>
         <button

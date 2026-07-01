@@ -144,6 +144,18 @@ body {
   background: #2c2c34;
   border-color: #1f1f26;
 }
+.toolbar button.act-white {
+  background: #ffffff;
+  color: #3a3a44;
+  border-color: #c7bfe0;
+}
+.toolbar button.act-white:hover:not(:disabled) {
+  background: #f3f0fb;
+  border-color: #b3a6d8;
+}
+.toolbar button.act-white .act-count {
+  background: rgba(0, 0, 0, 0.12);
+}
 .toolbar button.act-highlight {
   background: #fde68a;
   color: #5a4a12;

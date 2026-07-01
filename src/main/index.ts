@@ -248,8 +248,8 @@ function registerIpc(): void {
 
   ipcMain.handle(
     IPC.applyRedactions,
-    (_e, rects: RedactionRect[]) => {
-      pdf.applyRedactions(rects)
+    (_e, rects: RedactionRect[], fill?: 'black' | 'white') => {
+      pdf.applyRedactions(rects, fill ?? 'black')
       return pdf.getInfo()
     }
   )

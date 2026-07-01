@@ -56,8 +56,11 @@ const api = {
   info: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.info),
   renderPage: (index: number, zoom: number): Promise<RenderResult> =>
     ipcRenderer.invoke(IPC.renderPage, index, zoom),
-  applyRedactions: (rects: RedactionRect[]): Promise<DocumentInfo> =>
-    ipcRenderer.invoke(IPC.applyRedactions, rects),
+  applyRedactions: (
+    rects: RedactionRect[],
+    fill?: 'black' | 'white'
+  ): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.applyRedactions, rects, fill),
   wordAt: (pageIndex: number, x: number, y: number): Promise<WordHit | null> =>
     ipcRenderer.invoke(IPC.wordAt, pageIndex, x, y),
   selectText: (

@@ -326,9 +326,16 @@ export function renderPage(
 
 /**
  * Apply TRUE redaction: removes the underlying text/image content under each
- * rect, not just a cosmetic black box. This is the security-critical operation.
+ * rect, not just a cosmetic box. This is the security-critical operation.
+ *
+ * `fill` only changes the *colour painted over the removed area* — both 'black'
+ * and 'white' delete the underlying data. White is a whiteout that still leaves
+ * nothing recoverable underneath.
  */
-export function applyRedactions(rects: RedactionRect[]): void {
+export function applyRedactions(
+  rects: RedactionRect[],
+  fill: 'black' | 'white' = 'black'
+): void {
   const d = requireDoc()
   if (rects.length === 0) return
 
@@ -339,7 +346,7 @@ export function applyRedactions(rects: RedactionRect[]): void {
     byPage.set(r.pageIndex, list)
   }
 
-  operation('墨消しの適用', () => {
+  operation(fill === 'white' ? '白塗りの適用' : '墨消しの適用', () => {
     for (const [pageIndex, pageRects] of byPage) {
       const page = d.loadPage(pageIndex)
       for (const r of pageRects) {
@@ -352,11 +359,13 @@ export function applyRedactions(rects: RedactionRect[]): void {
         ])
         annot.update()
       }
-      // black_boxes=true draws a black fill where content was removed.
+      // black_boxes=true paints a solid black box; false leaves the (white)
+      // page showing through — a whiteout. Either way the covered content is
+      // truly removed (verified: extractable text → 0 for both).
       // REDACT_IMAGE_PIXELS clears only the covered pixels of an image — so a
       // scanned/full-page-image PDF keeps the rest of the page intact (REMOVE
       // would delete the whole intersecting image, wiping the page).
-      page.applyRedactions(true, mupdf.PDFPage.REDACT_IMAGE_PIXELS)
+      page.applyRedactions(fill === 'black', mupdf.PDFPage.REDACT_IMAGE_PIXELS)
     }
   })
 }
