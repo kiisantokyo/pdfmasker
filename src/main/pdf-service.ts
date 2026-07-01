@@ -891,29 +891,59 @@ export function rotatePages(indices: number[], delta: RotateDelta): DocumentInfo
  * directly — no top-left/bottom-left flip needed. This keeps yellow highlights
  * aligned when 閉じ代 / 用紙サイズ変更 scale and move the page content.
  */
-function transformAnnotations(
-  page: mupdf.PDFPage,
-  s: number,
-  tx: number,
-  ty: number
+/** A PDF content-stream matrix [a b c d e f] (maps (x,y)→(ax+cy+e, bx+dy+f)). */
+type Mat6 = [number, number, number, number, number, number]
+
+/** Overwrite a page box with a plain [0,0,w,h] rectangle. Written as a raw
+ *  array on purpose: page.setPageBox() applies hidden rotation/repositioning
+ *  transforms (it swapped/offset the box on /Rotate pages), which is exactly
+ *  what broke 回転＋用紙サイズ変更. */
+function putBox(
+  d: mupdf.PDFDocument,
+  obj: mupdf.PDFObject,
+  name: string,
+  w: number,
+  h: number
 ): void {
-  const mapX = (x: number): number => s * x + tx
-  const mapY = (y: number): number => s * y + ty
+  const arr = d.newArray()
+  arr.push(0)
+  arr.push(0)
+  arr.push(w)
+  arr.push(h)
+  obj.put(name, arr)
+}
+
+function transformAnnotations(page: mupdf.PDFPage, m: Mat6): void {
+  const [a, b, c, d, e, f] = m
+  const mapX = (x: number, y: number): number => a * x + c * y + e
+  const mapY = (x: number, y: number): number => b * x + d * y + f
   for (const annot of page.getAnnotations()) {
     const obj = annot.getObject()
     const rect = obj.get('Rect')
     if (rect && rect.isArray() && rect.length === 4) {
-      rect.put(0, mapX(rect.get(0).asNumber()))
-      rect.put(1, mapY(rect.get(1).asNumber()))
-      rect.put(2, mapX(rect.get(2).asNumber()))
-      rect.put(3, mapY(rect.get(3).asNumber()))
+      const x0 = rect.get(0).asNumber()
+      const y0 = rect.get(1).asNumber()
+      const x1 = rect.get(2).asNumber()
+      const y1 = rect.get(3).asNumber()
+      // Map both corners then re-normalise: a 90/270° transform swaps which
+      // corner is the minimum.
+      const px0 = mapX(x0, y0)
+      const py0 = mapY(x0, y0)
+      const px1 = mapX(x1, y1)
+      const py1 = mapY(x1, y1)
+      rect.put(0, Math.min(px0, px1))
+      rect.put(1, Math.min(py0, py1))
+      rect.put(2, Math.max(px0, px1))
+      rect.put(3, Math.max(py0, py1))
     }
     const qp = obj.get('QuadPoints')
     if (qp && qp.isArray()) {
       const n = qp.length
       for (let k = 0; k + 1 < n; k += 2) {
-        qp.put(k, mapX(qp.get(k).asNumber()))
-        qp.put(k + 1, mapY(qp.get(k + 1).asNumber()))
+        const x = qp.get(k).asNumber()
+        const y = qp.get(k + 1).asNumber()
+        qp.put(k, mapX(x, y))
+        qp.put(k + 1, mapY(x, y))
       }
     }
     annot.update()
@@ -936,37 +966,65 @@ export function resizePages(
   operation('用紙サイズ変更', () => {
     for (const i of indices) {
       const page = d.loadPage(i)
+      const rot = readRotation(page)
       const [llx, lly, urx, ury] = mediaBox(page)
       const W = urx - llx
       const H = ury - lly
       if (W <= 0 || H <= 0) continue
 
-      // Match the page's current orientation.
-      const landscape = W > H
+      // Work in *visual* space. A /Rotate=90/270 page's on-screen orientation is
+      // the media box swapped; deciding the paper orientation and the fit from
+      // the raw box (ignoring rotation) is what clipped/mis-placed rotated
+      // pages. We fit+centre in visual space, bake the rotation into the content
+      // matrix, and reset /Rotate to 0 so the box and content always agree.
+      const turned = rot === 90 || rot === 270
+      const visW = turned ? H : W
+      const visH = turned ? W : H
+      const landscape = visW > visH
       const tW = (landscape ? longMm : shortMm) * MM_TO_PT
       const tH = (landscape ? shortMm : longMm) * MM_TO_PT
 
-      const s = Math.min(tW / W, tH / H)
-      const tx = (tW - W * s) / 2 - llx * s
-      const ty = (tH - H * s) / 2 - lly * s
+      const s = Math.min(tW / visW, tH / visH)
+      const ox = (tW - visW * s) / 2
+      const oy = (tH - visH * s) / 2
+
+      // Affine mapping raw media coords → new upright page coords: undo the page
+      // /Rotate, scale by s, then centre by (ox,oy).
+      let m: Mat6
+      switch (rot) {
+        case 90:
+          m = [0, -s, s, 0, ox - s * lly, s * (W + llx) + oy]
+          break
+        case 180:
+          m = [-s, 0, 0, -s, s * (W + llx) + ox, s * (H + lly) + oy]
+          break
+        case 270:
+          m = [0, s, -s, 0, s * (H + lly) + ox, oy - s * llx]
+          break
+        default:
+          m = [s, 0, 0, s, ox - s * llx, oy - s * lly]
+      }
 
       const obj = page.getObject()
-      // Remember the very first (pre-resize) size so the UI can show "B4→A4".
+      // Remember the very first (pre-resize) *visual* size so the UI can show
+      // "B4→A4" correctly regardless of rotation.
       const had = obj.get('PMOrigW')
       if (!(had && had.isNumber())) {
-        obj.put('PMOrigW', W)
-        obj.put('PMOrigH', H)
+        obj.put('PMOrigW', visW)
+        obj.put('PMOrigH', visH)
       }
       const enc = new TextEncoder()
       const wrapped = concatBytes([
-        enc.encode(`q ${s} 0 0 ${s} ${tx} ${ty} cm\n`),
+        enc.encode(`q ${m[0]} ${m[1]} ${m[2]} ${m[3]} ${m[4]} ${m[5]} cm\n`),
         readPageContents(obj),
         enc.encode('\nQ\n')
       ])
       obj.put('Contents', d.addStream(wrapped, {}))
-      page.setPageBox('MediaBox', [0, 0, tW, tH])
-      page.setPageBox('CropBox', [0, 0, tW, tH])
-      transformAnnotations(page, s, tx, ty)
+      // Rotation is baked into the content — the page is upright now.
+      obj.put('Rotate', 0)
+      putBox(d, obj, 'MediaBox', tW, tH)
+      putBox(d, obj, 'CropBox', tW, tH)
+      transformAnnotations(page, m)
     }
   })
   return getInfo()
@@ -1082,7 +1140,7 @@ export function addBindingMargin(opts: BindingMarginOptions): DocumentInfo {
 
       const stream = d.addStream(wrapped, {})
       page.getObject().put('Contents', stream)
-      transformAnnotations(page, s, tx, ty)
+      transformAnnotations(page, [s, 0, 0, s, tx, ty])
     }
   })
 
