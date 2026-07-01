@@ -329,6 +329,12 @@ body {
   padding: 0 5px;
   white-space: nowrap;
 }
+.page-dims-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
 .page-dims {
   color: var(--muted);
   font-size: 11px;

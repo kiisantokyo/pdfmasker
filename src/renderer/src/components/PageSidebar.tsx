@@ -258,15 +258,6 @@ export default function PageSidebar({
                   />
                   <span className="page-num">{p.index + 1}</span>
                   {p.rotation ? <span className="page-rot">{p.rotation}°</span> : null}
-                  {p.origWidth &&
-                  p.origHeight &&
-                  paperName(p.origWidth, p.origHeight) !==
-                    paperName(p.width, p.height) ? (
-                    <span className="page-resize">
-                      {paperName(p.origWidth, p.origHeight)}→
-                      {paperName(p.width, p.height)}
-                    </span>
-                  ) : null}
                   {pending > 0 && <span className="page-badge">{pending}</span>}
                 </div>
                 <Thumb
@@ -276,7 +267,18 @@ export default function PageSidebar({
                   rotation={p.rotation}
                   refreshKey={refreshKey}
                 />
-                <span className="page-dims">{sizeLabel(p.width, p.height)}</span>
+                <div className="page-dims-row">
+                  <span className="page-dims">{sizeLabel(p.width, p.height)}</span>
+                  {p.origWidth &&
+                  p.origHeight &&
+                  paperName(p.origWidth, p.origHeight) !==
+                    paperName(p.width, p.height) ? (
+                    <span className="page-resize">
+                      {paperName(p.origWidth, p.origHeight)}→
+                      {paperName(p.width, p.height)}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </li>
           )
