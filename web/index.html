@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>究極の墨消し｜PDFの機密情報を本当に消すデスクトップ墨消しアプリ</title>
+<meta name="description" content="黒く塗るだけでは消えていません。「究極の墨消し」は下層のテキスト・画像データごと完全に削除する“真の墨消し”アプリ。なぞる・クリック・検索で直感操作、スキャンPDFもOCR対応。PDFは外部に送信しません。Windows買い切り。" />
+<meta property="og:title" content="究極の墨消し｜PDFを本当に消す墨消しアプリ" />
+<meta property="og:description" content="黒く塗るだけでは消えていません。下層データごと完全削除する“真の墨消し”。PDFは外部に送信しません。Windows買い切り。" />
+<meta property="og:type" content="website" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ===================== ヘッダー ===================== -->
+<header class="site-header">
+  <div class="container nav">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true">■</span>
+      <span class="brand-name">究極の墨消し</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#problem">なぜ必要か</a>
+      <a href="#redaction">真の墨消し</a>
+      <a href="#features">機能</a>
+      <a href="#privacy">安心設計</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn btn-sm btn-primary" href="#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ===================== 1. ヒーロー ===================== -->
+<section class="hero">
+  <div class="container hero-grid">
+    <div class="hero-copy">
+      <h1 class="hero-title">黒く塗るだけでは、<br><span class="accent">消えていません。</span></h1>
+      <p class="hero-sub">
+        「究極の墨消し」は、PDFの機密情報を<strong>“本物の墨消し”</strong>で消すデスクトップアプリ。
+        黒い四角を乗せるのではなく、下に隠れたテキスト・画像データそのものを完全に削除します。
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="#download">ダウンロード（買い切り）</a>
+        <a class="btn btn-ghost btn-lg" href="#features">機能を見る</a>
+      </div>
+      <ul class="trust-badges">
+        <li>✓ データは外部に送信しません</li>
+        <li>✓ Windows対応</li>
+        <li>✓ 買い切り・サブスクなし</li>
+      </ul>
+    </div>
+    <div class="hero-shot">
+      <figure class="shot shot-lg">
+        <img src="assets/ss-01-main.png" alt="究極の墨消しのメイン画面" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-1">メイン画面</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 2. 課題提起 ===================== -->
+<section id="problem" class="section section-alt">
+  <div class="container">
+    <h2 class="section-title">その黒塗り、本当に消えていますか？</h2>
+    <p class="section-lead">
+      PDFに黒い四角形を重ねても、その下のテキストや画像データは消えていません。
+      コピーして貼り付ける、テキストを選択する、解析ツールにかける——たったそれだけで、
+      隠したはずの氏名・住所・金額が読み取れてしまいます。
+      「見えない」と「データが無い」は、まったく別のことです。
+    </p>
+
+    <div class="compare">
+      <div class="compare-card bad">
+        <div class="compare-head">❌ ただの黒塗り</div>
+        <p>見た目は隠れる → <strong>データは残る</strong> → 選択・コピー・解析で復元できる</p>
+      </div>
+      <div class="compare-card good">
+        <div class="compare-head">✅ 究極の墨消し</div>
+        <p>データを削除 → <strong>下に何も無い</strong> → 復元できない</p>
+      </div>
+    </div>
+
+    <figure class="shot">
+      <img src="assets/ss-02-compare.png" alt="黒塗りと真の墨消しの比較" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+      <figcaption data-ss="SS-2">左：黒塗りはテキストを選択コピーできてしまう／右：本アプリ適用後はテキストが存在しない</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ===================== 3. コア機能：真の墨消し ===================== -->
+<section id="redaction" class="section">
+  <div class="container">
+    <h2 class="section-title">見た目を隠すのではなく、データを消す。</h2>
+    <p class="section-lead">
+      究極の墨消しは、指定した領域の<strong>テキスト・画像データそのものをPDFから削除</strong>します。
+      処理後のファイルは、テキスト抽出ツールにかけても、選択しても、対象の情報は存在しません。
+      これが「真の墨消し（true redaction）」です。
+    </p>
+
+    <div class="points">
+      <div class="point">
+        <div class="point-ico">🧹</div>
+        <h3>完全削除</h3>
+        <p>黒塗りではなく、下層データを物理的に除去します。</p>
+      </div>
+      <div class="point">
+        <div class="point-ico">🖼</div>
+        <h3>画像内の情報も対象</h3>
+        <p>画像領域は実データを削除します。</p>
+      </div>
+      <div class="point">
+        <div class="point-ico">🔒</div>
+        <h3>元に戻せない仕上がり</h3>
+        <p>出力ファイルから機密情報が消えます。</p>
+      </div>
+    </div>
+
+    <div class="shot-pair">
+      <figure class="shot">
+        <img src="assets/ss-03-before.png" alt="墨消し適用前（選択中）" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-3">適用前：選択中（青オーバーレイ）</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/ss-04-after.png" alt="墨消し適用後" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-4">適用後：データごと削除</figcaption>
+      </figure>
+    </div>
+
+    <p class="note">
+      ⚠️ 仕上がりはお客様自身でご確認ください。PDFの構造によっては別途メタデータ等の確認が必要な場合があります。
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 4. 直感的な選択 ===================== -->
+<section id="features" class="section section-alt">
+  <div class="container">
+    <h2 class="section-title">なぞる・押す・囲む。直感のまま選べる。</h2>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <h3>なぞって選択</h3>
+        <p>テキストをドラッグするだけ。ライブプレビューで範囲が見えます。</p>
+        <span class="chip chip--mode">選択：文字なぞり</span>
+      </div>
+      <div class="feature-card">
+        <h3>単語クリック</h3>
+        <p>消したい単語をクリックでピンポイント選択。</p>
+      </div>
+      <div class="feature-card">
+        <h3>同じ語を一括追加</h3>
+        <p>一度選んだ語と同じ言葉を、文書全体からまとめて追加。</p>
+        <span class="chip">同語＋</span>
+      </div>
+      <div class="feature-card">
+        <h3>四角で囲む</h3>
+        <p>表・図・印影など、好きな矩形を囲んで指定。</p>
+      </div>
+      <div class="feature-card">
+        <h3>キーワード検索</h3>
+        <p>消したい語を検索してヒット箇所へ。</p>
+        <span class="chip chip--search">🔍 キーワードで検索</span>
+        <span class="chip">🔍 追加</span>
+      </div>
+      <div class="feature-card">
+        <h3>2色の使い分け</h3>
+        <p>完全削除の「墨」と、強調用の「黄」（ハイライト注釈）。</p>
+        <span class="chip chip--sumi"><i class="sq"></i>墨<i class="count">0</i></span>
+        <span class="chip chip--kiiro"><i class="sq"></i>黄<i class="count">0</i></span>
+      </div>
+    </div>
+
+    <div class="shot-trio">
+      <figure class="shot">
+        <img src="assets/ss-05-trace.png" alt="なぞり選択" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-5">なぞり選択</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/ss-06-sameword.png" alt="同語＋で複数ハイライト" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-6">同語＋で一括選択</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/ss-07-search.png" alt="検索バー" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-7">キーワード検索</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 5. OCR ===================== -->
+<section class="section">
+  <div class="container narrow-grid">
+    <div>
+      <h2 class="section-title left">紙をスキャンしただけのPDFでも、検索して消せる。</h2>
+      <p class="section-lead left">
+        文字情報を持たないスキャンPDFでも、内蔵OCR（日本語＋英語対応）が文字を認識。
+        検索・単語クリック・なぞり選択が使えるようになり、画像の中の文字も墨消しできます。
+        OCRの処理はすべてお使いのPC内で行われます。
+      </p>
+    </div>
+    <figure class="shot">
+      <img src="assets/ss-08-ocr.png" alt="スキャンPDFをOCR認識して墨消し" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+      <figcaption data-ss="SS-8">OCRでスキャンPDFを墨消し</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ===================== 6. AIアシスト ===================== -->
+<section class="section section-alt">
+  <div class="container narrow-grid reverse">
+    <figure class="shot">
+      <img src="assets/ss-09-ai.png" alt="AI連携モーダル" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+      <figcaption data-ss="SS-9">AIに候補を依頼／結果を貼り戻し</figcaption>
+    </figure>
+    <div>
+      <h2 class="section-title left">消す候補をAIに相談。最後に選ぶのは、あなた。</h2>
+      <p class="section-lead left">
+        「この文書の個人名と住所を挙げて」——固有名詞や指示からAIに墨消し候補を依頼できます。
+        AIの回答を貼り戻すと候補が一覧表示され、<strong>人の目で取捨選択</strong>してから墨消し。
+        過剰に消しすぎず、消し漏らさない。判断の主導権は常にお客様にあります。
+      </p>
+      <span class="chip chip--ai">AI連携/固有名詞…</span>
+
+      <div class="promise">
+        🔒 <strong>PDFを勝手に外部へ送ることはありません。</strong>
+        本アプリ自体は文書を外部に送信しません。AIに相談する際は、お客様の操作で内容をコピーし、
+        ご自身で外部AIに貼り付ける方式です。何を渡すかは、いつもお客様が決められます。
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 7. ページ編集・仕上げ ===================== -->
+<section class="section">
+  <div class="container">
+    <h2 class="section-title">1本で、配布できる形まで整える。</h2>
+
+    <div class="edit-grid">
+      <div class="edit-card">
+        <h3>ページ削除／回転</h3>
+        <p>不要ページの削除、向きの修正。</p>
+        <span class="chip">↺ 左</span><span class="chip">↻ 右</span><span class="chip">🗑 ページ削除</span>
+      </div>
+      <div class="edit-card">
+        <h3>用紙サイズ変更</h3>
+        <p>A4・B4など、向きを保ったまま変更。</p>
+        <span class="chip">用紙サイズ</span>
+      </div>
+      <div class="edit-card">
+        <h3>閉じ代</h3>
+        <p>製本・ファイリング用に余白を追加。</p>
+        <span class="chip">閉じ代</span>
+      </div>
+      <div class="edit-card">
+        <h3>ページ番号</h3>
+        <p>通し番号を一括付与（1 ／ 1/総数 ／ -1- ／ P.1）。</p>
+        <span class="chip">№ ページ番号</span>
+      </div>
+      <div class="edit-card">
+        <h3>赤いスタンプ</h3>
+        <p>朱印・社外秘・取扱注意などを押印。</p>
+        <span class="chip chip--stamp"><i class="dot"></i>スタンプ</span>
+      </div>
+      <div class="edit-card">
+        <h3>プロパティ消去</h3>
+        <p>作成者などの文書プロパティを削除。</p>
+        <span class="chip">プロパティ消去</span>
+      </div>
+    </div>
+
+    <div class="shot-trio">
+      <figure class="shot">
+        <img src="assets/ss-10-thumbs.png" alt="サムネサイドバー" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-10">サムネ一覧で一括操作</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/ss-11-stamp.png" alt="赤いスタンプ仕上がり" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-11">赤いスタンプ</figcaption>
+      </figure>
+      <figure class="shot">
+        <img src="assets/ss-12-pagenum.png" alt="ページ番号付与" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+        <figcaption data-ss="SS-12">ページ番号付与</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 8. 安心設計 ===================== -->
+<section id="privacy" class="section section-alt">
+  <div class="container">
+    <h2 class="section-title">機密文書のための、安心の作り。</h2>
+    <div class="assure-grid">
+      <div class="assure"><span class="assure-ico">🖥</span><h3>ローカル処理</h3><p>すべてお使いのPC内で完結</p></div>
+      <div class="assure"><span class="assure-ico">🚫</span><h3>外部送信なし</h3><p>PDFを勝手に送りません</p></div>
+      <div class="assure"><span class="assure-ico">↩</span><h3>やり直し自由</h3><p>すべての操作にUndo / Redo</p></div>
+      <div class="assure"><span class="assure-ico">🇯🇵</span><h3>日本語UI</h3><p>迷わず使える日本語インターフェース</p></div>
+      <div class="assure"><span class="assure-ico">💴</span><h3>買い切り</h3><p>サブスク不要、一度の購入で</p></div>
+      <div class="assure"><span class="assure-ico">🗂</span><h3>インストール不要</h3><p>ポータブル版、置くだけで起動</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 9. 動作環境・価格 ===================== -->
+<section id="download" class="section">
+  <div class="container">
+    <h2 class="section-title">ダウンロード</h2>
+    <div class="pricing">
+      <div class="price-card">
+        <div class="price-tag"><span class="yen">¥</span><span class="amount" data-todo>◯◯◯</span><span class="per">買い切り</span></div>
+        <ul class="price-feats">
+          <li>真の墨消し・ページ編集の全機能</li>
+          <li>Windows ポータブル版（インストール不要）</li>
+          <li>サブスクなし・追加課金なし</li>
+        </ul>
+        <a class="btn btn-primary btn-lg full" href="#" data-todo>今すぐダウンロード</a>
+        <p class="price-note">お支払い：<span data-todo>（決済プラットフォーム・準備中）</span></p>
+      </div>
+      <div class="env">
+        <h3>動作環境</h3>
+        <dl>
+          <dt>OS</dt><dd>Windows（ポータブル版・インストール不要）</dd>
+          <dt>形式</dt><dd>単体実行ファイル（<code>pdfmasker-x.x.x-portable.exe</code>）</dd>
+          <dt>macOS</dt><dd data-todo>現在、macOS 版の提供はありません（予定は調整中）</dd>
+        </dl>
+        <p class="price-note">1ライセンスの利用範囲は購入ページの条件に準じます（→ <a href="#">利用規約</a>）。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 10. FAQ ===================== -->
+<section id="faq" class="section section-alt">
+  <div class="container narrow">
+    <h2 class="section-title">よくあるご質問</h2>
+    <div class="faq">
+      <details>
+        <summary>ふつうの黒塗りと何が違うの？</summary>
+        <p>黒塗りは上に四角を重ねるだけで、下のデータは残ります。本アプリは下層のテキスト・画像データそのものを削除するため、選択・コピー・解析しても情報が出てきません。</p>
+      </details>
+      <details>
+        <summary>本当に復元できないの？</summary>
+        <p>墨消しした領域のデータはファイルから削除されます。ただしPDFの構造は多様なため、出力後はお客様ご自身で結果をご確認ください（→ 利用規約に記載）。</p>
+      </details>
+      <details>
+        <summary>私のPDFはどこかに送られますか？</summary>
+        <p>いいえ。本アプリはPDFを外部に送信しません。AIに相談する場合のみ、お客様の操作で内容をコピーし、ご自身で外部AIに貼り付ける形になります。</p>
+      </details>
+      <details>
+        <summary>スキャンした書類でも使えますか？</summary>
+        <p>はい。内蔵OCR（日本語＋英語）で文字を認識し、検索や墨消しができます。</p>
+      </details>
+      <details>
+        <summary>Mac版はありますか？</summary>
+        <p data-todo>現在はWindows版のみの提供です。</p>
+      </details>
+      <details>
+        <summary>返金はできますか？</summary>
+        <p>ダウンロード提供のデジタル製品のため、原則として返金は承っておりません（→ 利用規約第9条）。</p>
+      </details>
+      <details>
+        <summary>サブスクですか？</summary>
+        <p>いいえ、買い切りです。</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ===================== フッター ===================== -->
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">■</span><span class="brand-name">究極の墨消し</span></div>
+      <p class="footer-note">PDFの機密情報を“本物の墨消し”で消すデスクトップアプリ。</p>
+    </div>
+    <nav class="footer-links">
+      <a href="#">利用規約（EULA）</a>
+      <a href="#">プライバシー</a>
+      <a href="#">特定商取引法に基づく表記</a>
+      <a href="https://cosmo-law.jp/">お問い合わせ</a>
+    </nav>
+  </div>
+  <div class="container footer-copy">
+    <p>提供：高橋喜一 ／ コスモポリタン法律事務所　<a href="https://cosmo-law.jp/">https://cosmo-law.jp/</a></p>
+    <p>© <span id="year">2026</span> 高橋喜一</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
