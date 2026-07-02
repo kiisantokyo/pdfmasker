@@ -39,7 +39,7 @@
     "appId": "jp.cosmo-law.pdfmasker",
     "productName": "究極の墨消し",
     "asar": false,
-    "compression": "store",
+    "compression": "maximum",
     "directories": {
       "output": "release"
     },
@@ -52,11 +52,13 @@
     "win": {
       "icon": "build/icon.ico",
       "target": [
-        "portable"
+        "nsis"
       ]
     },
-    "portable": {
-      "artifactName": "pdfmasker-${version}-portable.exe"
+    "nsis": {
+      "artifactName": "pdfmasker-${version}-setup.${ext}",
+      "oneClick": true,
+      "perMachine": false
     }
   }
 }
