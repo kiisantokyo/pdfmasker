@@ -6,12 +6,16 @@ import Tesseract from 'tesseract.js'
 import type {
   ApplyScope,
   BindingMarginOptions,
+  CleanReport,
+  DiscrepancyReport,
   DocumentInfo,
+  HiddenTextReport,
   MetadataEntry,
   PageInfo,
   PageNumberFormat,
   PageNumberOptions,
   RedactionRect,
+  SaveProfile,
   RotateDelta,
   ScopedTerm,
   StampOptions,
@@ -19,6 +23,7 @@ import type {
   WordHit
 } from '../shared/types'
 import { STAMP_PNG_BASE64 } from './stamp-assets'
+import { filterContentStream } from './content-filter'
 
 let doc: mupdf.PDFDocument | null = null
 let currentPath: string | null = null
@@ -571,6 +576,78 @@ function normalizeForMatch(s: string): string {
   return out
 }
 
+/**
+ * NFKC-normalise and drop ALL whitespace, so matching ignores line wraps and
+ * spacing differences — e.g. an address split across two lines in a table cell
+ * ("東京都千代田区丸の内" + newline + "1-2-3 …") still matches the joined term
+ * an AI returns.
+ */
+function stripWhitespace(s: string): string {
+  return s.normalize('NFKC').replace(/\s+/gu, '')
+}
+
+/**
+ * Whitespace-insensitive native-text search on one page. mupdf's `page.search`
+ * treats a line break as a single space, so a term with no separator at the wrap
+ * point won't match across lines. This concatenates the page's characters with
+ * all whitespace removed and maps each match back to per-line boxes.
+ */
+function wsInsensitiveFind(
+  page: mupdf.PDFPage,
+  pageIndex: number,
+  needle: string
+): RedactionRect[] {
+  const target = stripWhitespace(needle)
+  if (!target) return []
+  const quads: mupdf.Quad[] = []
+  const lineOf: number[] = []
+  let norm = ''
+  const owner: number[] = []
+  let lineIdx = -1
+  page.toStructuredText().walk({
+    beginLine() {
+      lineIdx++
+    },
+    onChar(c, _origin, _font, _size, quad) {
+      const ci = quads.length
+      quads.push(quad)
+      lineOf.push(lineIdx)
+      for (const nc of stripWhitespace(c)) {
+        norm += nc
+        owner.push(ci)
+      }
+    }
+  })
+  const out: RedactionRect[] = []
+  for (
+    let idx = norm.indexOf(target);
+    idx >= 0;
+    idx = norm.indexOf(target, idx + target.length)
+  ) {
+    const first = owner[idx]
+    const last = owner[idx + target.length - 1]
+    // One box per visual line (split at line boundaries, not by y-overlap, so a
+    // wrapped term doesn't paint one giant rectangle over the whitespace between).
+    let cur: { x0: number; y0: number; x1: number; y1: number } | null = null
+    let curLine = -1
+    for (let k = first; k <= last; k++) {
+      const b = quadToBox(quads[k])
+      if (cur && lineOf[k] === curLine) {
+        cur.x0 = Math.min(cur.x0, b.x0)
+        cur.y0 = Math.min(cur.y0, b.y0)
+        cur.x1 = Math.max(cur.x1, b.x1)
+        cur.y1 = Math.max(cur.y1, b.y1)
+      } else {
+        if (cur) out.push({ pageIndex, ...cur })
+        cur = { ...b }
+        curLine = lineOf[k]
+      }
+    }
+    if (cur) out.push({ pageIndex, ...cur })
+  }
+  return out
+}
+
 /** Find every occurrence of `needle` across all pages (case-insensitive). */
 export function findWord(needle: string): RedactionRect[] {
   const d = requireDoc()
@@ -581,11 +658,17 @@ export function findWord(needle: string): RedactionRect[] {
   for (let i = 0; i < count; i++) {
     const page = d.loadPage(i)
     const matches = page.search(trimmed, 500)
-    for (const match of matches) {
-      // Each match is one or more quads (one per visual line); redact each.
-      for (const quad of match) {
-        rects.push({ pageIndex: i, ...quadToBox(quad) })
+    if (matches.length > 0) {
+      for (const match of matches) {
+        // Each match is one or more quads (one per visual line); redact each.
+        for (const quad of match) {
+          rects.push({ pageIndex: i, ...quadToBox(quad) })
+        }
       }
+    } else {
+      // Native search missed on this page — retry ignoring whitespace so a term
+      // that wraps across lines (with no separator) is still found.
+      rects.push(...wsInsensitiveFind(page, i, trimmed))
     }
   }
   // Fallback: search OCR words when the PDF has no native text.
@@ -676,6 +759,297 @@ export function needsOcr(): boolean {
 
 export function isOcrApplied(): boolean {
   return ocr !== null
+}
+
+// ─── Hidden (invisible) text: detect / visible-only extract / remove ──────────
+// Invisible text (render mode 3/7) is not shown on screen but IS extracted by
+// search/copy/AI — an adversary can hide instructions or false data there. These
+// use the content-stream filter to isolate or strip it.
+
+/**
+ * Serialize the open doc and reopen an isolated throwaway copy for read-only
+ * inspection. Uses NO garbage collection on purpose: mupdf's `garbage` compaction
+ * renumbers objects and invalidates the live document's undo journal, so a plain
+ * save keeps the journal intact while still producing a fully independent copy.
+ */
+function reopenCopy(): mupdf.PDFDocument {
+  const d = requireDoc()
+  const bytes = Uint8Array.from(d.saveToBuffer('').asUint8Array())
+  const copy = mupdf.Document.openDocument(bytes, 'application/pdf').asPDF()
+  if (!copy) throw new Error('内部コピーの生成に失敗しました')
+  return copy
+}
+
+/**
+ * Map each ExtGState resource name on the page to its fill alpha (`/ca`), so the
+ * content filter can flag text drawn transparently (ca ≈ 0). Missing ⇒ opaque.
+ */
+function pageGsAlpha(pageObj: mupdf.PDFObject): Record<string, number> {
+  const out: Record<string, number> = {}
+  const res = pageObj.getInheritable('Resources')
+  const egs = res && res.isDictionary() ? res.get('ExtGState') : null
+  if (egs && egs.isDictionary()) {
+    egs.forEach((val, key) => {
+      const ca = val.get('ca')
+      if (ca && ca.isNumber()) out[String(key)] = ca.asNumber()
+    })
+  }
+  return out
+}
+
+/** Replace a page's content with a single uncompressed stream of `bytes`. */
+function writePageContents(
+  d: mupdf.PDFDocument,
+  pageObj: mupdf.PDFObject,
+  bytes: Uint8Array
+): void {
+  pageObj.put('Contents', d.addStream(bytes, {}))
+}
+
+/**
+ * Detect invisible text (a hidden / poisoned OCR layer). Returns the run count
+ * and a per-page readable preview. Does not modify the open document.
+ */
+export function detectHiddenText(): HiddenTextReport {
+  const copy = reopenCopy()
+  try {
+    const count = copy.countPages()
+    const items: { page: number; text: string }[] = []
+    for (let i = 0; i < count; i++) {
+      const pageObj = copy.loadPage(i).getObject()
+      const bytes = readPageContents(pageObj)
+      if (bytes.length === 0) continue
+      const alpha = pageGsAlpha(pageObj)
+      const invis = filterContentStream(bytes, 'invisible', alpha)
+      if (invis.removed === 0) continue
+      // Isolate the hidden text: strip the VISIBLE glyphs, then collect each
+      // remaining text BLOCK (≈ paragraph) separately. Counting blocks — not the
+      // low-level draw operators — makes "N 箇所" match what a human perceives
+      // (a Word white-text paragraph is one passage, not dozens of operators).
+      writePageContents(copy, pageObj, filterContentStream(bytes, 'visible', alpha).output)
+      let block = ''
+      copy.loadPage(i).toStructuredText().walk({
+        beginTextBlock() {
+          block = ''
+        },
+        onChar(c) {
+          block += c
+        },
+        endLine() {
+          block += ' '
+        },
+        endTextBlock() {
+          const t = block.replace(/\s+/g, ' ').trim()
+          if (t) items.push({ page: i, text: t })
+        }
+      })
+    }
+    return { runs: items.length, items }
+  } finally {
+    copy.destroy?.()
+  }
+}
+
+/**
+ * Whole-document plain text with invisible text removed — "what is visually
+ * present". Bundle THIS to an external AI so hidden text can't reach it.
+ */
+export function visibleOnlyText(): string {
+  const copy = reopenCopy()
+  try {
+    const count = copy.countPages()
+    const parts: string[] = []
+    for (let i = 0; i < count; i++) {
+      const pageObj = copy.loadPage(i).getObject()
+      const bytes = readPageContents(pageObj)
+      if (bytes.length > 0) {
+        const r = filterContentStream(bytes, 'invisible', pageGsAlpha(pageObj))
+        if (r.removed > 0) writePageContents(copy, pageObj, r.output)
+      }
+      parts.push(copy.loadPage(i).toStructuredText().asText())
+    }
+    return parts.join('\n')
+  } finally {
+    copy.destroy?.()
+  }
+}
+
+/**
+ * Permanently remove invisible text from the open document (one undoable op).
+ * Returns the refreshed info and how many hidden text runs were removed.
+ */
+export function removeHiddenText(): { info: DocumentInfo; removed: number } {
+  const d = requireDoc()
+  const count = d.countPages()
+  let removed = 0
+  operation('隠し文字の削除', () => {
+    for (let i = 0; i < count; i++) {
+      const pageObj = d.loadPage(i).getObject()
+      const bytes = readPageContents(pageObj)
+      if (bytes.length === 0) continue
+      const r = filterContentStream(bytes, 'invisible', pageGsAlpha(pageObj))
+      if (r.removed > 0) {
+        writePageContents(d, pageObj, r.output)
+        removed += r.removed
+      }
+    }
+  })
+  return { info: getInfo(), removed }
+}
+
+// ─── Render × embedded-text comparison (thorough hidden-text audit) ───────────
+// The heuristic detector above recognises specific hiding methods. This instead
+// compares what is actually VISIBLE (OCR of the rendered page) with what is
+// EMBEDDED (extractable text). Any embedded line that is not visibly present —
+// no matter HOW it was hidden (behind an image, microscopic, off-tint, …) — is
+// flagged. Heavy (OCR per page); exposed as a separate, opt-in action.
+
+/** Fraction of an embedded line (as 4-gram windows) that appears in the OCR text. */
+function visibleRatio(s: string, hay: string): number {
+  if (s.length < 4) return hay.includes(s) ? 1 : 0
+  let total = 0
+  let found = 0
+  for (let i = 0; i + 4 <= s.length; i += 2) {
+    total++
+    if (hay.includes(s.slice(i, i + 4))) found++
+  }
+  return total ? found / total : hay.includes(s) ? 1 : 0
+}
+
+/**
+ * Pure comparator: which embedded lines are NOT visibly present in `ocrText`?
+ * Whitespace/case-insensitive with OCR-error tolerance (partial n-gram match).
+ * Exported for testing.
+ */
+export function discrepantLines(embeddedLines: string[], ocrText: string): string[] {
+  const hay = stripWhitespace(ocrText)
+  const out: string[] = []
+  for (const l of embeddedLines) {
+    const norm = stripWhitespace(l)
+    if (norm.length < 3) continue // too short to judge reliably
+    // Only flag lines that are almost entirely ABSENT from the rendered page.
+    // A visible line survives OCR errors (some n-grams still match); a hidden
+    // line matches almost nothing → low ratio.
+    if (visibleRatio(norm, hay) < 0.3) out.push(l.replace(/\s+/g, ' ').trim())
+  }
+  return out
+}
+
+/**
+ * Audit every page by OCR'ing its rendered image and comparing to the embedded
+ * text. Returns, for each embedded line NOT visibly present, both the embedded
+ * text and what is actually visible at that position (so the user can see the
+ * discrepancy). `cachePath` is the Tesseract model cache. Slow — opt-in.
+ */
+export async function findDiscrepantText(
+  cachePath: string,
+  onProgress?: (page: number, total: number) => void
+): Promise<DiscrepancyReport> {
+  const d = requireDoc()
+  const count = d.countPages()
+  const zoom = OCR_DPI / 72
+  const worker = await Tesseract.createWorker('jpn+eng', Tesseract.OEM.LSTM_ONLY, {
+    cachePath
+  })
+  try {
+    const items: { page: number; embedded: string; visible: string }[] = []
+    for (let i = 0; i < count; i++) {
+      const page = d.loadPage(i)
+      // Embedded lines with their vertical band.
+      const emb: { text: string; y0: number; y1: number }[] = []
+      let text = ''
+      let ly0 = 0
+      let ly1 = 0
+      page.toStructuredText().walk({
+        beginLine(bbox) {
+          text = ''
+          ly0 = bbox[1]
+          ly1 = bbox[3]
+        },
+        onChar(c) {
+          text += c
+        },
+        endLine() {
+          if (text.trim()) emb.push({ text, y0: ly0, y1: ly1 })
+        }
+      })
+      if (emb.length === 0) {
+        onProgress?.(i + 1, count)
+        continue
+      }
+      const pix = page.toPixmap(
+        mupdf.Matrix.scale(zoom, zoom),
+        mupdf.ColorSpace.DeviceRGB,
+        false,
+        true
+      )
+      const png = pix.asPNG()
+      pix.destroy?.()
+      const { data } = await worker.recognize(Buffer.from(png), {}, { blocks: true })
+      // OCR words with page-pt positions (for pairing) and the whole visible text.
+      const words: { text: string; x0: number; yt: number; yb: number }[] = []
+      for (const b of data.blocks ?? []) {
+        for (const p of b.paragraphs) {
+          for (const ln of p.lines) {
+            for (const w of ln.words) {
+              const t = w.text?.trim()
+              if (t)
+                words.push({
+                  text: t,
+                  x0: w.bbox.x0 / zoom,
+                  yt: w.bbox.y0 / zoom,
+                  yb: w.bbox.y1 / zoom
+                })
+            }
+          }
+        }
+      }
+      // Merge consecutive discrepant lines (a wrapped paragraph) into one item.
+      let pend: { y1: number; embedded: string; visible: string } | null = null
+      const flush = (): void => {
+        if (pend) {
+          items.push({ page: i, embedded: pend.embedded, visible: pend.visible })
+          pend = null
+        }
+      }
+      for (const el of emb) {
+        const norm = stripWhitespace(el.text)
+        // What is actually VISIBLE at this line's position (same vertical band)?
+        // Compare against THIS position — not the whole page — so text that only
+        // differs subtly from a visible line elsewhere (e.g. a white "9,000,000"
+        // vs a visible "1,000,000") is still caught.
+        const visible = words
+          .filter((w) => w.yb >= el.y0 && w.yt <= el.y1)
+          .sort((a, b) => a.x0 - b.x0)
+          .map((w) => w.text)
+          .join(' ')
+          .trim()
+        const discrepant =
+          norm.length >= 3 && visibleRatio(norm, stripWhitespace(visible)) < 0.3
+        if (!discrepant) {
+          flush()
+          continue
+        }
+        const clean = el.text.replace(/\s+/g, ' ').trim()
+        if (pend) {
+          // Consecutive hidden lines (a wrapped paragraph) → one item.
+          pend.embedded += clean
+          pend.y1 = el.y1
+        } else {
+          pend = {
+            y1: el.y1,
+            embedded: clean,
+            visible: visible || '（この位置に見える文字はありません）'
+          }
+        }
+      }
+      flush()
+      onProgress?.(i + 1, count)
+    }
+    return { runs: items.length, items }
+  } finally {
+    await worker.terminate()
+  }
 }
 
 /**
@@ -806,14 +1180,16 @@ export function extractCandidates(): TermCount[] {
 
 /** Count document occurrences for a set of terms (drops zero-count terms). */
 export function countTerms(terms: string[]): TermCount[] {
-  const text = documentText()
+  // Whitespace-insensitive so terms that wrap across lines in the source (the
+  // extracted text joins lines with '\n') are still counted — matches findWord.
+  const text = stripWhitespace(documentText())
   const seen = new Set<string>()
   const out: TermCount[] = []
   for (const raw of terms) {
     const term = raw.trim()
     if (!term || seen.has(term)) continue
     seen.add(term)
-    const count = countOccurrences(text, term)
+    const count = countOccurrences(text, stripWhitespace(term))
     if (count > 0) out.push({ term, count })
   }
   return out
@@ -1050,6 +1426,34 @@ export function movePage(from: number, to: number): DocumentInfo {
   const [moved] = order.splice(from, 1)
   order.splice(to, 0, moved)
   operation('ページ移動', () => d.rearrangePages(order))
+  return getInfo()
+}
+
+/**
+ * Move a set of pages so they land at insertion gap `to` (0..count, an index in
+ * the ORIGINAL order; `count` = end). The moved pages keep their relative order.
+ * One journal operation = one undo. Used by drag-and-drop reordering.
+ */
+export function movePages(indices: number[], to: number): DocumentInfo {
+  const d = requireDoc()
+  const count = d.countPages()
+  const sel = [...new Set(indices)]
+    .filter((i) => i >= 0 && i < count)
+    .sort((a, b) => a - b)
+  if (sel.length === 0) return getInfo()
+  const selSet = new Set(sel)
+  const order = Array.from({ length: count }, (_, i) => i)
+  const remaining = order.filter((i) => !selSet.has(i))
+  const clampedTo = Math.max(0, Math.min(to, count))
+  const insertAt = remaining.filter((i) => i < clampedTo).length
+  const newOrder = [
+    ...remaining.slice(0, insertAt),
+    ...sel,
+    ...remaining.slice(insertAt)
+  ]
+  // No-op if the order is unchanged.
+  if (newOrder.every((v, i) => v === i)) return getInfo()
+  operation('ページ移動', () => d.rearrangePages(newOrder))
   return getInfo()
 }
 
@@ -1454,11 +1858,313 @@ export function addStamp(opts: StampOptions): DocumentInfo {
 /** Serialize the current document to PDF bytes (garbage-collected & compacted). */
 export function saveToBuffer(): Uint8Array {
   const d = requireDoc()
-  const buf = d.saveToBuffer('garbage=compact,sanitize=yes')
-  const bytes = buf.asUint8Array()
-  buf.destroy?.()
-  // Copy out of the WASM heap so the bytes stay valid after buffer is freed.
-  return Uint8Array.from(bytes)
+  // mupdf's `garbage` compaction renumbers objects and invalidates the undo
+  // journal — running it on the live document would silently break Ctrl+Z after
+  // every save. So serialize the live doc WITHOUT garbage first (journal-safe),
+  // then compact on a reopened, fully independent copy. The live document keeps
+  // its full undo history.
+  const plain = Uint8Array.from(d.saveToBuffer('').asUint8Array())
+  const tmp = mupdf.Document.openDocument(plain, 'application/pdf').asPDF()
+  if (!tmp) return plain
+  try {
+    const buf = tmp.saveToBuffer('garbage=compact,sanitize=yes')
+    // Copy out of the WASM heap *before* freeing the buffer. asUint8Array() is a
+    // view into the heap; destroying the buffer frees that memory (the allocator
+    // then writes free-list pointers into the first bytes), so the copy must run
+    // while the buffer is still alive — otherwise the PDF header gets corrupted.
+    const out = Uint8Array.from(buf.asUint8Array())
+    buf.destroy?.()
+    return out
+  } finally {
+    tmp.destroy?.()
+  }
+}
+
+// ─── Save with a size profile (image recompression) ──────────────────────────
+// 'original' keeps images untouched (lossless). 'standard'/'light' downsample &
+// re-encode raster images to shrink scans/photos. Runs on a throwaway copy so the
+// live document keeps full quality and its undo history.
+
+const PROFILE_SETTINGS: Record<'standard' | 'light', { maxDpi: number; quality: number }> = {
+  standard: { maxDpi: 200, quality: 80 },
+  light: { maxDpi: 150, quality: 55 }
+}
+
+function longEdgePt(pageObj: mupdf.PDFObject): number {
+  const mb = pageObj.getInheritable('MediaBox')
+  if (mb && mb.isArray() && mb.length >= 4) {
+    const w = Math.abs(mb.get(2).asNumber() - mb.get(0).asNumber())
+    const h = Math.abs(mb.get(3).asNumber() - mb.get(1).asNumber())
+    if (w > 0 && h > 0) return Math.max(w, h)
+  }
+  return 842 // A4 long edge fallback
+}
+
+/**
+ * Re-encode a single image XObject as JPEG, downsampled so its long edge fits
+ * `capPx`. Returns a new image reference, or null when it should be left as-is
+ * (bilevel scan, transparency, or re-encoding wouldn't shrink it).
+ */
+function recompressImage(
+  d: mupdf.PDFDocument,
+  obj: mupdf.PDFObject,
+  capPx: number,
+  quality: number
+): mupdf.PDFObject | null {
+  let img: mupdf.Image
+  try {
+    img = d.loadImage(obj)
+  } catch {
+    return null
+  }
+  // Leave stencil masks, bilevel (fax) scans, and masked/transparent images.
+  if (img.getImageMask() || img.getBitsPerComponent() === 1 || img.getMask()) {
+    return null
+  }
+  const sm = obj.get('SMask')
+  if (sm && !sm.isNull()) return null
+
+  let pm: mupdf.Pixmap
+  try {
+    pm = img.toPixmap()
+  } catch {
+    return null
+  }
+  const extra: mupdf.Pixmap[] = []
+  try {
+    if (pm.getAlpha()) return null
+    let work = pm
+    const comps = work.getNumberOfComponents()
+    if (comps !== 1 && comps !== 3) {
+      work = work.convertToColorSpace(mupdf.ColorSpace.DeviceRGB, false)
+      extra.push(work)
+    }
+    const w = work.getWidth()
+    const h = work.getHeight()
+    const longEdge = Math.max(w, h)
+    let enc = work
+    if (capPx > 0 && longEdge > capPx) {
+      const scale = capPx / longEdge
+      const tw = Math.max(1, Math.round(w * scale))
+      const th = Math.max(1, Math.round(h * scale))
+      enc = work.warp(
+        [
+          [0, 0],
+          [w, 0],
+          [w, h],
+          [0, h]
+        ],
+        tw,
+        th
+      )
+      extra.push(enc)
+    }
+    let jpeg: Uint8Array
+    try {
+      jpeg = enc.asJPEG(quality, false)
+    } catch {
+      return null
+    }
+    // Only apply if it actually shrinks the stored image.
+    let origLen = Infinity
+    try {
+      origLen = obj.readRawStream().asUint8Array().length
+    } catch {
+      /* keep Infinity */
+    }
+    if (jpeg.length >= origLen) return null
+    return d.addImage(new mupdf.Image(Uint8Array.from(jpeg)))
+  } finally {
+    for (const p of extra) p.destroy?.()
+    pm.destroy?.()
+    img.destroy?.()
+  }
+}
+
+/** Downsample & re-encode raster images throughout `d` (in place). */
+function optimizeImages(d: mupdf.PDFDocument, maxDpi: number, quality: number): void {
+  const images = new Map<number, { obj: mupdf.PDFObject; capPx: number }>()
+  const refs: { dict: mupdf.PDFObject; name: string; num: number }[] = []
+  const count = d.countPages()
+  for (let i = 0; i < count; i++) {
+    const pageObj = d.loadPage(i).getObject()
+    const res = pageObj.getInheritable('Resources')
+    if (!res || !res.isDictionary()) continue
+    const xobj = res.get('XObject')
+    if (!xobj || !xobj.isDictionary()) continue
+    const capPx = Math.round((maxDpi * longEdgePt(pageObj)) / 72)
+    xobj.forEach((val, key) => {
+      const sub = val.get('Subtype')
+      if (!(sub && sub.isName() && sub.asName() === 'Image')) return
+      const num = val.isIndirect() ? val.asIndirect() : -1
+      refs.push({ dict: xobj, name: String(key), num })
+      if (num >= 0) {
+        const prev = images.get(num)
+        if (prev) {
+          if (capPx > prev.capPx) prev.capPx = capPx
+        } else {
+          images.set(num, { obj: val, capPx })
+        }
+      }
+    })
+  }
+  const replacements = new Map<number, mupdf.PDFObject>()
+  for (const [num, { obj, capPx }] of images) {
+    const nr = recompressImage(d, obj, capPx, quality)
+    if (nr) replacements.set(num, nr)
+  }
+  for (const r of refs) {
+    const nr = replacements.get(r.num)
+    if (nr) r.dict.put(r.name, nr)
+  }
+}
+
+/** Serialize with a size profile. 'original' == saveToBuffer(). */
+export function saveToBufferProfiled(profile: SaveProfile): Uint8Array {
+  if (profile === 'original') return saveToBuffer()
+  const { maxDpi, quality } = PROFILE_SETTINGS[profile]
+  const d = requireDoc()
+  // Optimize on an independent, journal-safe copy; never touch the live doc.
+  const plain = Uint8Array.from(d.saveToBuffer('').asUint8Array())
+  const tmp = mupdf.Document.openDocument(plain, 'application/pdf').asPDF()
+  if (!tmp) return saveToBuffer()
+  try {
+    optimizeImages(tmp, maxDpi, quality)
+    const buf = tmp.saveToBuffer(
+      'garbage=compact,sanitize=yes,compress-images,compress-fonts,compress'
+    )
+    const out = Uint8Array.from(buf.asUint8Array())
+    buf.destroy?.()
+    return out
+  } finally {
+    tmp.destroy?.()
+  }
+}
+
+// ─── Flatten to images (柱2): rasterize every page ───────────────────────────
+// Renders each page to a JPEG and rebuilds an image-only PDF. Because the output
+// contains only pixels, ALL hidden data — invisible/white text, metadata, hidden
+// layers, annotations, attachments, JavaScript — is structurally gone. Use it to
+// hand an adversary's document to an AI without leaking (or being deceived by)
+// anything not visually present.
+const FLATTEN_DPI = 200
+const FLATTEN_QUALITY = 80
+
+/** Serialize the current document as an image-only PDF (one JPEG per page). */
+export function flattenToImages(): Uint8Array {
+  const d = requireDoc()
+  const zoom = FLATTEN_DPI / 72
+  const out = new mupdf.PDFDocument()
+  try {
+    const count = d.countPages()
+    for (let i = 0; i < count; i++) {
+      const page = d.loadPage(i)
+      // showExtras=true bakes in visible annotations (highlights, etc.). The
+      // pixmap size already reflects the page's /Rotate, so derive the new page
+      // dimensions from it.
+      const pm = page.toPixmap(
+        mupdf.Matrix.scale(zoom, zoom),
+        mupdf.ColorSpace.DeviceRGB,
+        false,
+        true
+      )
+      const jpeg = Uint8Array.from(pm.asJPEG(FLATTEN_QUALITY, false))
+      const wpt = pm.getWidth() / zoom
+      const hpt = pm.getHeight() / zoom
+      pm.destroy?.()
+      const imgRef = out.addImage(new mupdf.Image(jpeg))
+      const res = out.addObject({ XObject: { Im0: imgRef } })
+      const content = `q ${wpt} 0 0 ${hpt} 0 0 cm /Im0 Do Q`
+      const pageObj = out.addPage([0, 0, wpt, hpt], 0, res, content)
+      out.insertPage(out.countPages(), pageObj)
+    }
+    const buf = out.saveToBuffer('garbage=compact,sanitize=yes,compress-images')
+    const bytes = Uint8Array.from(buf.asUint8Array())
+    buf.destroy?.()
+    return bytes
+  } finally {
+    out.destroy?.()
+  }
+}
+
+// ─── 提出前クリーニング ───────────────────────────────────────────────────────
+// One undoable step that scrubs everything not visually present: hidden text,
+// document properties (Info + XMP), embedded attachments, and JavaScript. Unlike
+// flattenToImages it keeps the visible text layer (still searchable/selectable).
+
+export function cleanForSubmission(): CleanReport {
+  const d = requireDoc()
+  let hiddenRuns = 0
+  const metaRemoved: string[] = []
+  let attachments = false
+  let javascript = false
+
+  operation('提出前クリーニング', () => {
+    // 1) Hidden (invisible / white) text.
+    const count = d.countPages()
+    for (let i = 0; i < count; i++) {
+      const pageObj = d.loadPage(i).getObject()
+      const bytes = readPageContents(pageObj)
+      if (bytes.length === 0) continue
+      const r = filterContentStream(bytes, 'invisible', pageGsAlpha(pageObj))
+      if (r.removed > 0) {
+        writePageContents(d, pageObj, r.output)
+        hiddenRuns += r.removed
+      }
+    }
+
+    const trailer = d.getTrailer()
+    // 2) Document properties (Info dict + XMP stream).
+    const info = trailer.get('Info')
+    if (info && info.isDictionary()) {
+      for (const [key, label] of INFO_LABELS) {
+        const v = info.get(key)
+        if (v && !v.isNull() && (!v.isString() || v.asString().trim() !== '')) {
+          metaRemoved.push(label)
+          info.delete(key)
+        }
+      }
+    }
+    const root = trailer.get('Root')
+    if (root && root.isDictionary()) {
+      const md = root.get('Metadata')
+      if (md && !md.isNull()) {
+        metaRemoved.push('XMPメタデータ')
+        root.delete('Metadata')
+      }
+      // 3) Embedded files and JavaScript live under the catalog /Names.
+      const names = root.get('Names')
+      if (names && names.isDictionary()) {
+        const ef = names.get('EmbeddedFiles')
+        if (ef && !ef.isNull()) {
+          attachments = true
+          names.delete('EmbeddedFiles')
+        }
+        const js = names.get('JavaScript')
+        if (js && !js.isNull()) {
+          javascript = true
+          names.delete('JavaScript')
+        }
+      }
+      // Document-open JavaScript action.
+      const oa = root.get('OpenAction')
+      if (oa && oa.isDictionary()) {
+        const s = oa.get('S')
+        if (s && s.isName() && s.asName() === 'JavaScript') {
+          javascript = true
+          root.delete('OpenAction')
+        }
+      }
+      // Document-level additional actions (/AA) can also carry JavaScript.
+      const aa = root.get('AA')
+      if (aa && !aa.isNull()) {
+        javascript = true
+        root.delete('AA')
+      }
+    }
+  })
+
+  return { info: getInfo(), hiddenRuns, metaRemoved, attachments, javascript }
 }
 
 export function markSavedAt(path: string): void {

@@ -3,7 +3,10 @@ import { IPC } from '../shared/types'
 import type {
   ActivateResult,
   BindingMarginOptions,
+  CleanReport,
+  DiscrepancyReport,
   DocumentInfo,
+  HiddenTextReport,
   LicenseState,
   MetaClearResult,
   MetadataEntry,
@@ -12,6 +15,7 @@ import type {
   PageNumberOptions,
   RedactionRect,
   RotateDelta,
+  SaveProfile,
   ScopedTerm,
   StampOptions,
   TermCount,
@@ -24,6 +28,8 @@ export interface SaveResult {
   needsPath?: boolean
   /** Blocked by the 案1 save gate (trial over, no valid key). */
   gated?: boolean
+  /** Written file size in bytes (set by size-profiled saves). */
+  size?: number
 }
 
 export interface RenderResult {
@@ -92,6 +98,25 @@ const api = {
   findTermsScoped: (items: ScopedTerm[]): Promise<RedactionRect[]> =>
     ipcRenderer.invoke(IPC.findTermsScoped, items),
   documentText: (): Promise<string> => ipcRenderer.invoke(IPC.documentText),
+  /** Whole-document text with invisible text removed (safe to hand to an AI). */
+  visibleText: (): Promise<string> => ipcRenderer.invoke(IPC.visibleText),
+  /** Scan for hidden (invisible) text; returns count + per-page preview. */
+  detectHiddenText: (): Promise<HiddenTextReport> =>
+    ipcRenderer.invoke(IPC.detectHiddenText),
+  /** Permanently remove invisible text (one undoable operation). */
+  removeHiddenText: (): Promise<{ info: DocumentInfo; removed: number }> =>
+    ipcRenderer.invoke(IPC.removeHiddenText),
+  /** Thorough audit: OCR each page and flag embedded text not visibly present. */
+  compareVisibleText: (): Promise<DiscrepancyReport> =>
+    ipcRenderer.invoke(IPC.compareVisibleText),
+  onCompareProgress: (
+    cb: (p: { page: number; count: number }) => void
+  ): (() => void) => {
+    const handler = (_e: unknown, p: { page: number; count: number }): void =>
+      cb(p)
+    ipcRenderer.on(IPC.compareProgress, handler)
+    return () => ipcRenderer.removeListener(IPC.compareProgress, handler)
+  },
   writeClipboard: (text: string): void => clipboard.writeText(text),
   needsOcr: (): Promise<boolean> => ipcRenderer.invoke(IPC.needsOcr),
   runOcr: (): Promise<{ total: number; info: DocumentInfo }> =>
@@ -116,6 +141,8 @@ const api = {
     ipcRenderer.invoke(IPC.resizePages, indices, widthMm, heightMm),
   movePage: (from: number, to: number): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.movePage, from, to),
+  movePages: (indices: number[], to: number): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.movePages, indices, to),
   rotatePage: (index: number, delta: RotateDelta): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.rotatePage, index, delta),
   bindingMargin: (opts: BindingMarginOptions): Promise<DocumentInfo> =>
@@ -128,6 +155,12 @@ const api = {
   redo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.redo),
   save: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.save),
   saveAs: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.saveAs),
+  saveAsSized: (profile: SaveProfile): Promise<SaveResult> =>
+    ipcRenderer.invoke(IPC.saveAsSized, profile),
+  saveAsFlattened: (): Promise<SaveResult> =>
+    ipcRenderer.invoke(IPC.saveAsFlattened),
+  cleanForSubmission: (): Promise<CleanReport> =>
+    ipcRenderer.invoke(IPC.cleanForSubmission),
   hasUnsavedChanges: (): Promise<boolean> =>
     ipcRenderer.invoke(IPC.hasUnsavedChanges)
 }

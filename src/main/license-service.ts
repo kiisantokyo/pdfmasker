@@ -4,19 +4,8 @@
 
 import { hostname } from 'node:os'
 import type { ActivateResult, LicenseState } from '../shared/types'
-import {
-  computeState,
-  lsActivate,
-  lsDeactivate,
-  type FetchFn
-} from './license-core'
-import {
-  clearLicense,
-  readLicense,
-  readTrial,
-  writeLicense,
-  writeTrial
-} from './license-store'
+import { lsActivate, lsDeactivate, type FetchFn } from './license-core'
+import { clearLicense, readLicense, writeLicense } from './license-store'
 
 // Electron's main process runs on Node, which exposes a global fetch.
 const fetchFn = globalThis.fetch as unknown as FetchFn
@@ -30,35 +19,10 @@ function instanceName(): string {
   }
 }
 
-/**
- * Start the trial clock on first run, and keep lastSeenAt fresh. firstRunAt is
- * written once and never moved forward, so the 30-day window is stable.
- */
-function ensureTrial(): void {
-  const { data, valid } = readTrial()
-  const nowIso = new Date().toISOString()
-  if (data && valid) {
-    if (data.lastSeenAt !== nowIso) {
-      writeTrial({ firstRunAt: data.firstRunAt, lastSeenAt: nowIso })
-    }
-    return
-  }
-  // Missing or tampered → (re)start the clock from now. A tampered file does
-  // not earn a fresh 30 days beyond what computeState already allows.
-  writeTrial({ firstRunAt: nowIso, lastSeenAt: nowIso })
-}
-
 /** The current license state — single source of truth for UI + save gate. */
 export function getState(): LicenseState {
-  ensureTrial()
-  const license = readLicense()
-  const trial = readTrial()
-  return computeState({
-    license,
-    trial: trial.data,
-    trialValid: trial.valid,
-    nowMs: Date.now()
-  })
+  // The app is now free: no trial clock, no license key, saving always allowed.
+  return { kind: 'free', canSave: true, expiresAt: null }
 }
 
 /** Activate a key on this device via Lemon Squeezy, then persist it. */

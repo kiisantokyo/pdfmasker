@@ -9,13 +9,15 @@ import type {
   PageNumberOptions,
   RedactionRect,
   RotateDelta,
+  SaveProfile,
   ScopedTerm,
   StampOptions
 } from '../shared/types'
 import * as pdf from './pdf-service'
 import * as license from './license-service'
-import { imagesToPdf, isImagePath } from './convert-image'
+import { imagesToPdf, isImagePath, naturalSortPaths } from './convert-image'
 import { isWordPath, wordToPdf } from './convert-word'
+import { buildConcatenatedPdf } from './convert-merge'
 
 // Remembers what the currently-open document was made from, so 名前を付けて保存
 // can suggest a sensible default file name and folder. `dir` is the source
@@ -71,8 +73,9 @@ async function openDropped(
 ): Promise<OpenResult> {
   if (paths.length === 0) throw new Error('ファイルが指定されていません')
 
-  const images = paths.filter(isImagePath)
-  const allImages = images.length === paths.length
+  const osdCache = join(app.getPath('userData'), 'tessdata')
+  const sorted = naturalSortPaths(paths)
+  const allImages = sorted.every(isImagePath)
 
   let bytes: Uint8Array
   let name: string
@@ -81,20 +84,18 @@ async function openDropped(
   let meta: typeof openMeta = null
 
   if (allImages) {
-    const osdCache = join(app.getPath('userData'), 'tessdata')
-    bytes = await imagesToPdf(images, osdCache)
+    bytes = await imagesToPdf(sorted, osdCache)
     imagesInvolved = true
-    const first = baseNoExt(images[0])
-    const dir = dirname(images[0])
+    const first = baseNoExt(sorted[0])
+    const dir = dirname(sorted[0])
     name =
-      images.length > 1 ? `${first} 他${images.length - 1}件.pdf` : `${first}.pdf`
+      sorted.length > 1 ? `${first} 他${sorted.length - 1}件.pdf` : `${first}.pdf`
     meta =
-      images.length >= 2
-        ? { kind: 'images', base: first, count: images.length, dir }
+      sorted.length >= 2
+        ? { kind: 'images', base: first, count: sorted.length, dir }
         : { kind: 'file', base: first, dir }
-  } else {
-    // Mixed or non-image drop: process the first non-image file only.
-    const target = paths.find((p) => !isImagePath(p)) ?? paths[0]
+  } else if (sorted.length === 1) {
+    const target = sorted[0]
     if (isWordPath(target)) {
       bytes = await wordToPdf(target)
       name = baseNoExt(target) + '.pdf'
@@ -105,8 +106,17 @@ async function openDropped(
       name = basename(target)
     }
     meta = { kind: 'file', base: baseNoExt(target), dir: dirname(target) }
-    if (paths.length > 1) {
-      message = '複数ファイルのうち先頭の1件のみを開きました。'
+  } else {
+    // Multiple files of mixed types → convert each and concatenate in natural
+    // file-name order (2 < 10) into a single PDF.
+    const res = await buildConcatenatedPdf(sorted, osdCache)
+    bytes = res.bytes
+    imagesInvolved = sorted.some(isImagePath)
+    const first = baseNoExt(sorted[0])
+    name = `${first} 他${sorted.length - 1}件.pdf`
+    meta = { kind: 'file', base: first, dir: dirname(sorted[0]) }
+    if (res.skipped.length > 0) {
+      message = `${res.skipped.length}件は取り込めませんでした（対応形式外／変換失敗）。`
     }
   }
 
@@ -288,6 +298,9 @@ function registerIpc(): void {
   )
 
   ipcMain.handle(IPC.documentText, () => pdf.getDocumentText())
+  ipcMain.handle(IPC.visibleText, () => pdf.visibleOnlyText())
+  ipcMain.handle(IPC.detectHiddenText, () => pdf.detectHiddenText())
+  ipcMain.handle(IPC.removeHiddenText, () => pdf.removeHiddenText())
 
   ipcMain.handle(IPC.needsOcr, () => pdf.needsOcr())
 
@@ -297,6 +310,13 @@ function registerIpc(): void {
       e.sender.send(IPC.ocrProgress, { page, count })
     })
     return { total, info: pdf.getInfo() }
+  })
+
+  ipcMain.handle(IPC.compareVisibleText, async (e) => {
+    const cachePath = join(app.getPath('userData'), 'tessdata')
+    return pdf.findDiscrepantText(cachePath, (page, count) => {
+      e.sender.send(IPC.compareProgress, { page, count })
+    })
   })
 
   ipcMain.handle(IPC.deletePage, (_e, index: number) => pdf.deletePage(index))
@@ -320,6 +340,10 @@ function registerIpc(): void {
   ipcMain.handle(
     IPC.movePage,
     (_e, from: number, to: number) => pdf.movePage(from, to)
+  )
+  ipcMain.handle(
+    IPC.movePages,
+    (_e, indices: number[], to: number) => pdf.movePages(indices, to)
   )
 
   ipcMain.handle(
@@ -369,6 +393,38 @@ function registerIpc(): void {
     pdf.markSavedAt(result.filePath)
     return { saved: true, path: result.filePath }
   })
+
+  ipcMain.handle(IPC.saveAsSized, async (_e, profile: SaveProfile) => {
+    if (!license.getState().canSave) return { saved: false, gated: true }
+    const result = await dialog.showSaveDialog({
+      title: 'Save PDF As',
+      defaultPath: suggestedSavePath(),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+    if (result.canceled || !result.filePath) return { saved: false }
+    const bytes = pdf.saveToBufferProfiled(profile)
+    await writeFile(result.filePath, bytes)
+    pdf.markSavedAt(result.filePath)
+    return { saved: true, path: result.filePath, size: bytes.length }
+  })
+
+  ipcMain.handle(IPC.saveAsFlattened, async () => {
+    if (!license.getState().canSave) return { saved: false, gated: true }
+    const result = await dialog.showSaveDialog({
+      title: 'Save PDF As',
+      defaultPath: suggestedSavePath(),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    })
+    if (result.canceled || !result.filePath) return { saved: false }
+    const bytes = pdf.flattenToImages()
+    await writeFile(result.filePath, bytes)
+    // The flattened image-only file is a separate export, not "the document" —
+    // don't mark it as the current path (avoids a later 上書き保存 overwriting the
+    // image file with the still-editable text document).
+    return { saved: true, path: result.filePath, size: bytes.length }
+  })
+
+  ipcMain.handle(IPC.cleanForSubmission, () => pdf.cleanForSubmission())
 
   // --- License (シリアルキー + 30日試用) ---------------------------------
   ipcMain.handle(IPC.licenseStatus, () => license.getState())

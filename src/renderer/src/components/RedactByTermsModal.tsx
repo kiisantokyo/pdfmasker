@@ -181,7 +181,9 @@ export default function RedactByTermsModal({
   const generate = async (): Promise<void> => {
     setLoading(true)
     try {
-      const docText = embedText ? await pdfApi.documentText() : undefined
+      // Bundle only VISIBLE text (invisible/hidden layers stripped) so a poisoned
+      // OCR layer or hidden instructions in the source can't reach the AI.
+      const docText = embedText ? await pdfApi.visibleText() : undefined
       if (embedText && !docText?.trim()) {
         setAskNote(
           '⚠ この文書からテキストを抽出できませんでした（画像化されたPDFの可能性）。' +
@@ -341,6 +343,9 @@ export default function RedactByTermsModal({
                 onChange={(e) => setEmbedText(e.target.checked)}
               />
               文書本文をプロンプトに含める（推奨：これだけでAIが内容を読めます。オフにする場合はAIにPDFを添付してください）
+              <span className="hint">
+                ※ 画面に表示されない隠し文字は自動的に除き、見える内容だけを渡します。
+              </span>
             </label>
 
             <div className="terms-tools">

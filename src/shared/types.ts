@@ -70,6 +70,46 @@ export interface TermCount {
   kind?: string
 }
 
+/**
+ * Output file-size profile for saving.
+ * - 'original': images untouched (lossless, largest).
+ * - 'standard': images downsampled to ~200dpi, JPEG q80 (balanced, default).
+ * - 'light': images downsampled to ~150dpi, JPEG q55 (smallest, for email).
+ */
+export type SaveProfile = 'original' | 'standard' | 'light'
+
+/** What 提出前クリーニング removed (all in one undoable step). */
+export interface CleanReport {
+  info: DocumentInfo
+  hiddenRuns: number
+  metaRemoved: string[]
+  attachments: boolean
+  javascript: boolean
+}
+
+/** One line where embedded text differs from what is visibly rendered. */
+export interface DiscrepancyItem {
+  page: number
+  /** The embedded (extractable) text that is not visibly present. */
+  embedded: string
+  /** What is actually visible at that position (from OCR of the render). */
+  visible: string
+}
+
+/** Result of the render-vs-embedded OCR comparison. */
+export interface DiscrepancyReport {
+  runs: number
+  items: DiscrepancyItem[]
+}
+
+/** Result of scanning for hidden (invisible) text. */
+export interface HiddenTextReport {
+  /** Number of invisible text-showing operators found. */
+  runs: number
+  /** Per-page readable preview of the hidden text. */
+  items: { page: number; text: string }[]
+}
+
 /** A term to redact, with how widely to apply it. */
 export interface ScopedTerm {
   text: string
@@ -189,6 +229,7 @@ export interface StampOptions {
  * key is no longer valid (refund/disable) and the trial is also over.
  */
 export type LicenseKind =
+  | 'free'
   | 'trial'
   | 'trial_expired'
   | 'active'
@@ -240,12 +281,18 @@ export const IPC = {
   findTerms: 'pdf:findTerms',
   findTermsScoped: 'pdf:findTermsScoped',
   documentText: 'pdf:documentText',
+  visibleText: 'pdf:visibleText',
+  detectHiddenText: 'pdf:detectHiddenText',
+  removeHiddenText: 'pdf:removeHiddenText',
+  compareVisibleText: 'pdf:compareVisibleText',
+  compareProgress: 'pdf:compareProgress',
   needsOcr: 'pdf:needsOcr',
   runOcr: 'pdf:runOcr',
   ocrProgress: 'pdf:ocrProgress',
   deletePage: 'pdf:deletePage',
   deletePages: 'pdf:deletePages',
   movePage: 'pdf:movePage',
+  movePages: 'pdf:movePages',
   rotatePage: 'pdf:rotatePage',
   rotatePages: 'pdf:rotatePages',
   resizePages: 'pdf:resizePages',
@@ -256,6 +303,9 @@ export const IPC = {
   redo: 'pdf:redo',
   save: 'pdf:save',
   saveAs: 'pdf:saveAs',
+  saveAsSized: 'pdf:saveAsSized',
+  saveAsFlattened: 'pdf:saveAsFlattened',
+  cleanForSubmission: 'pdf:cleanForSubmission',
   hasUnsavedChanges: 'pdf:hasUnsavedChanges',
   licenseStatus: 'license:status',
   licenseActivate: 'license:activate',

@@ -2,25 +2,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ApplyScope,
   BindingSide,
+  CleanReport,
+  DiscrepancyReport,
   DocumentInfo,
-  LicenseState,
+  HiddenTextReport,
   MetadataEntry,
   PageNumberFormat,
   PageNumberPosition,
   RedactionRect,
   RotateDelta,
+  SaveProfile,
   SelectMode,
   StampKind,
   StampPosition
 } from '@shared/types'
 import { STAMP_LABELS } from '@shared/types'
-import { licenseApi, pdfApi } from './lib/api'
+import { pdfApi } from './lib/api'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
 import ContinuousViewer from './components/ContinuousViewer'
 import RedactByTermsModal from './components/RedactByTermsModal'
-import TrialBanner from './components/TrialBanner'
-import LicenseDialog from './components/LicenseDialog'
+import HiddenTextModal from './components/HiddenTextModal'
 
 // Auto build stamp (date + git commit), injected at build time. Lets every
 // build be told apart without manually bumping the version number.
@@ -53,13 +55,9 @@ export default function App(): React.JSX.Element {
   const [sidebarW, setSidebarW] = useState(210)
   // App version (package.json), shown in the welcome screen and status bar.
   const [appVersion, setAppVersion] = useState('')
-  // License / 30-day trial state (single source of truth = main process).
-  const [license, setLicense] = useState<LicenseState | null>(null)
-  const [licenseOpen, setLicenseOpen] = useState(false)
 
   useEffect(() => {
     void pdfApi.appVersion().then(setAppVersion)
-    void licenseApi.status().then(setLicense)
   }, [])
 
   const startResize = (e: React.PointerEvent): void => {
@@ -88,6 +86,20 @@ export default function App(): React.JSX.Element {
   // Text of the most recent selection, used by the "同語＋" toolbar button.
   const [lastSelText, setLastSelText] = useState('')
   const [termsOpen, setTermsOpen] = useState(false)
+  // サイズを指定して保存モーダル
+  const [sizeOpen, setSizeOpen] = useState(false)
+  const [sizeProfile, setSizeProfile] = useState<SaveProfile>('standard')
+  // 隠し文字（透明テキスト）モーダル
+  const [hiddenReport, setHiddenReport] = useState<HiddenTextReport | null>(null)
+  // 開いたファイルに隠し文字があった件数（警告バナー用。null=警告なし）
+  const [hiddenWarning, setHiddenWarning] = useState<number | null>(null)
+  // 提出前クリーニング（確認→実行→結果）
+  const [cleanConfirm, setCleanConfirm] = useState(false)
+  const [cleanResult, setCleanResult] = useState<CleanReport | null>(null)
+  // 隠し文字の徹底照合（OCR）
+  const [compareConfirm, setCompareConfirm] = useState(false)
+  const [compareResult, setCompareResult] = useState<DiscrepancyReport | null>(null)
+  const [compareProg, setCompareProg] = useState<{ page: number; count: number } | null>(null)
   const [bindingOpen, setBindingOpen] = useState(false)
   const [bindSide, setBindSide] = useState<BindingSide>('left')
   const [bindMm, setBindMm] = useState(20)
@@ -211,6 +223,11 @@ export default function App(): React.JSX.Element {
       setRefreshKey((k) => k + 1)
       resetHist()
       setStatus(`「${info.name}」を開きました（${info.pageCount} ページ）。`)
+      // Alert the user if the file carries hidden text (white / invisible).
+      void pdfApi
+        .detectHiddenText()
+        .then((r) => setHiddenWarning(r.runs > 0 ? r.runs : null))
+        .catch(() => setHiddenWarning(null))
     },
     [resetHist]
   )
@@ -277,6 +294,10 @@ export default function App(): React.JSX.Element {
           setStatus(
             `ファイルを${mode === 'before' ? '先頭' : '末尾'}に追加しました（全 ${res.info.pageCount} ページ）。`
           )
+          void pdfApi
+            .detectHiddenText()
+            .then((r) => setHiddenWarning(r.runs > 0 ? r.runs : null))
+            .catch(() => {})
         }
         if (res.message) setStatus(res.message)
         if (res.ocr === 'auto') await runOcr()
@@ -466,6 +487,31 @@ export default function App(): React.JSX.Element {
       setStatus('ページ番号を付けました。')
     }, 'ページ番号の付与')
 
+  // 隠し文字（透明テキスト）の確認 → 削除。detect は文書を変えないので undo 対象外。
+  const openHiddenText = (): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      setHiddenReport(await pdfApi.detectHiddenText())
+    }, '隠し文字の確認')
+
+  const removeHidden = (): Promise<void> =>
+    run(async () => {
+      const cur = pending
+      const res = await pdfApi.removeHiddenText()
+      // Content-only change; keep the user's pending marks across undo/redo.
+      pushHist(true, cur, cur)
+      setDoc(res.info)
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setHiddenReport(null)
+      setHiddenWarning(null)
+      setStatus(
+        res.removed > 0
+          ? '隠し文字を削除しました（元に戻すで復元可）。'
+          : '削除する隠し文字はありませんでした。'
+      )
+    }, '隠し文字の削除')
+
   const applyStamp = (): Promise<void> =>
     run(async () => {
       if (!doc) return
@@ -529,14 +575,22 @@ export default function App(): React.JSX.Element {
       setStatus(`ページを ${to + 1} 番目に移動しました。`)
     }, 'ページ移動')
 
-  // The trial-expired prompt: refresh state, open the license dialog, explain.
-  const onSaveGated = useCallback(() => {
-    void licenseApi.status().then(setLicense)
-    setLicenseOpen(true)
-    setStatus(
-      '試用期間が終了しました。保存・書き出しを続けるにはライセンスキーが必要です。'
-    )
-  }, [])
+  // Drag-and-drop reorder from the thumbnail sidebar (single or multi-select).
+  const reorder = (indices: number[], to: number): Promise<void> =>
+    run(async () => {
+      if (!doc || indices.length === 0) return
+      const info = await pdfApi.movePages(indices, to)
+      pushHist(true, pending, [])
+      setDoc(info)
+      setPending([]) // page indices shift after reordering
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setStatus(`${indices.length} ページを移動しました。`)
+    }, 'ページ移動')
+
+  // The app is free — saving is never gated. Kept as a no-op so the save
+  // handlers' (now-unreachable) gate branches still compile.
+  const onSaveGated = useCallback(() => {}, [])
 
   const save = (): Promise<void> =>
     run(async () => {
@@ -566,6 +620,7 @@ export default function App(): React.JSX.Element {
       setCurrentPage(0)
       setRefreshKey((k) => k + 1)
       setLastSelText('')
+      setHiddenWarning(null)
       setStatus('PDF・Word・画像ファイルを開いて始めましょう。')
     }, '閉じる')
 
@@ -595,6 +650,80 @@ export default function App(): React.JSX.Element {
         setStatus(`${res.path} に保存しました。`)
       }
     }, '名前を付けて保存')
+
+  // Save with an image-size profile (opens a picker; shows resulting size).
+  const saveSized = (): Promise<void> =>
+    run(async () => {
+      const res = await pdfApi.saveAsSized(sizeProfile)
+      if (res.gated) {
+        onSaveGated()
+        return
+      }
+      if (res.saved) {
+        setDirty(false)
+        if (doc) setDoc({ ...doc, path: res.path ?? doc.path })
+        setSizeOpen(false)
+        const mb = res.size ? (res.size / (1024 * 1024)).toFixed(2) : '?'
+        setStatus(`${res.path} に保存しました（${mb} MB）。`)
+      }
+    }, 'サイズを指定して保存')
+
+  // Export an image-only PDF (structurally removes all hidden data). Separate
+  // artifact — does not change the editable document.
+  const saveFlattened = (): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      const res = await pdfApi.saveAsFlattened()
+      if (res.gated) {
+        onSaveGated()
+        return
+      }
+      if (res.saved) {
+        const mb = res.size ? (res.size / (1024 * 1024)).toFixed(2) : '?'
+        setStatus(`画像化して保存しました（${mb} MB・隠し情報なし）：${res.path}`)
+      }
+    }, '画像化して保存')
+
+  // 提出前クリーニング: strip hidden text, metadata, attachments, JS (one undo).
+  const cleanSubmission = (): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      const cur = pending
+      const rep = await pdfApi.cleanForSubmission()
+      pushHist(true, cur, cur)
+      setDoc(rep.info)
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setHiddenWarning(null)
+      setCleanConfirm(false)
+      setCleanResult(rep)
+      setStatus('提出前クリーニングを実行しました。')
+    }, '提出前クリーニング')
+
+  // Thorough audit: OCR each page and compare to the embedded text (slow).
+  const runCompare = (): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      setCompareConfirm(false)
+      setCompareProg({ page: 0, count: doc.pageCount })
+      // Progress updates are optional — degrade gracefully if the bridge lacks it.
+      const off =
+        typeof pdfApi.onCompareProgress === 'function'
+          ? pdfApi.onCompareProgress((p) => setCompareProg(p))
+          : (): void => {}
+      try {
+        const rep = await pdfApi.compareVisibleText()
+        setCompareResult(rep)
+        setStatus(
+          rep.runs > 0
+            ? `徹底照合：画面に見当たらない埋め込みテキストを ${rep.runs} 件検出しました。`
+            : '徹底照合：画面と食い違う埋め込みテキストは見つかりませんでした。'
+        )
+      } finally {
+        off()
+        setCompareProg(null)
+      }
+    }, '隠し文字の徹底照合')
 
   // Clicking a word adds it to the selection (and remembers its text).
   const onWordClick = (
@@ -742,6 +871,10 @@ export default function App(): React.JSX.Element {
   const onDrop = (e: React.DragEvent): void => {
     e.preventDefault()
     setDragging(false)
+    // Ignore internal drags (e.g. thumbnail reordering) — only external file
+    // drops carry a 'Files' type. Prevents the open/placement popup from firing
+    // when a page is dragged in the sidebar.
+    if (!Array.from(e.dataTransfer.types).includes('Files')) return
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
     if (files.length > 10) {
@@ -984,6 +1117,236 @@ export default function App(): React.JSX.Element {
             setStatus(summary)
           }}
         />
+      )}
+
+      {hiddenReport && (
+        <HiddenTextModal
+          report={hiddenReport}
+          busy={busy}
+          onClose={() => setHiddenReport(null)}
+          onRemove={removeHidden}
+        />
+      )}
+
+      {/* 提出前クリーニング：実行前の確認 */}
+      {cleanConfirm && (
+        <div className="modal-backdrop" onClick={() => setCleanConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>提出前クリーニングを実行しますか？</h2>
+            <p className="modal-desc">
+              相手方への提出・配布の前に、次の「目に見えない情報」をまとめて除去します。
+              見えている内容（本文・レイアウト）は変わりません。
+            </p>
+            <ul className="clean-list">
+              <li>隠し文字（透明・白・不可視のテキスト）</li>
+              <li>文書プロパティ（作成者・作成日時・作成ソフト名など）</li>
+              <li>添付ファイル（埋め込みファイル）</li>
+              <li>JavaScript（自動実行スクリプト）</li>
+            </ul>
+            <p className="modal-warn">
+              ⚠ ただし、<b>画像の裏に隠した文字や特殊な方法の隠し文字は除去できません</b>。
+              あらゆる隠し方を確実に取り除くには「<b>隠し文字の徹底照合（OCR）</b>」で確認のうえ、
+              「保存 ▸ <b>画像化して保存</b>」で書き出すのが最も確実です。
+            </p>
+            <p className="modal-desc">
+              実行後は「元に戻す（Ctrl+Z）」で復元できます。
+            </p>
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setCleanConfirm(false)}>
+                キャンセル
+              </button>
+              <button
+                className="modal-primary"
+                onClick={cleanSubmission}
+                disabled={busy}
+              >
+                実行する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 提出前クリーニング：完了 */}
+      {cleanResult && (
+        <div className="modal-backdrop" onClick={() => setCleanResult(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>提出前クリーニング 完了</h2>
+            {cleanResult.hiddenRuns ||
+            cleanResult.metaRemoved.length ||
+            cleanResult.attachments ||
+            cleanResult.javascript ? (
+              <>
+                <p className="modal-desc">次の情報を除去しました：</p>
+                <ul className="clean-list">
+                  {cleanResult.hiddenRuns > 0 && (
+                    <li>隠し文字 {cleanResult.hiddenRuns} 箇所</li>
+                  )}
+                  {cleanResult.metaRemoved.length > 0 && (
+                    <li>文書プロパティ（{cleanResult.metaRemoved.join('・')}）</li>
+                  )}
+                  {cleanResult.attachments && <li>添付ファイル</li>}
+                  {cleanResult.javascript && <li>JavaScript</li>}
+                </ul>
+                <p className="modal-desc">元に戻す（Ctrl+Z）で復元できます。</p>
+              </>
+            ) : (
+              <p className="meta-empty">
+                ✓ 除去すべき隠し情報は見つかりませんでした。このファイルはクリーンです。
+              </p>
+            )}
+            <div className="modal-actions">
+              <button className="modal-primary" onClick={() => setCleanResult(null)}>
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 徹底照合：実行前の確認 */}
+      {compareConfirm && (
+        <div className="modal-backdrop" onClick={() => setCompareConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>隠し文字の徹底照合（OCR）</h2>
+            <p className="modal-desc">
+              各ページを画像として読み取り（OCR）、<b>実際に見えている文字</b>と
+              <b>埋め込まれている文字</b>を突き合わせます。画像の裏に隠した文字や極小文字など、
+              あらゆる隠し方の「見えないのに埋め込まれた文字」を洗い出します。
+            </p>
+            <p className="modal-warn">
+              ⚠ この処理はページ数に応じて<b>時間がかかります</b>（数十秒〜数分）。
+              初回はOCRモデルのダウンロードが必要な場合があります。実行してよろしいですか？
+            </p>
+            <div className="modal-actions">
+              <button
+                className="modal-cancel"
+                onClick={() => setCompareConfirm(false)}
+              >
+                キャンセル
+              </button>
+              <button className="modal-primary" onClick={runCompare} disabled={busy}>
+                実行する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 徹底照合：進捗 */}
+      {compareProg && (
+        <div className="modal-backdrop">
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>徹底照合を実行中…</h2>
+            <p className="modal-desc">
+              {compareProg.page} / {compareProg.count} ページを照合しています。
+              このまましばらくお待ちください。
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 徹底照合：結果 */}
+      {compareResult && (
+        <div className="modal-backdrop" onClick={() => setCompareResult(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>徹底照合 結果</h2>
+            {compareResult.runs > 0 ? (
+              <>
+                <p className="modal-desc">
+                  <b>画面に見えている文字</b>と<b>埋め込まれている文字</b>が食い違う箇所を{' '}
+                  <b>{compareResult.runs} 件</b>検出しました（要確認）。
+                </p>
+                <div className="cmp-list">
+                  {compareResult.items.map((it, i) => (
+                    <div key={i} className="cmp-item">
+                      <div className="cmp-page">P.{it.page + 1}</div>
+                      <div className="cmp-rows">
+                        <div className="cmp-row">
+                          <span className="cmp-label cmp-visible">画面の表示</span>
+                          <span className="cmp-text">{it.visible}</span>
+                        </div>
+                        <div className="cmp-row">
+                          <span className="cmp-label cmp-embedded">埋め込み</span>
+                          <span className="cmp-text">{it.embedded}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="modal-warn">
+                  「埋め込み」は画面に見えないのに文書内に存在する文字です。検索・コピー・AI分析ではこちらが読まれます。
+                  確実に除去するには「保存 ▸ 画像化して保存（隠し情報を完全除去）」をご利用ください。
+                </p>
+              </>
+            ) : (
+              <p className="meta-empty">
+                ✓ 画面と食い違う埋め込みテキストは見つかりませんでした。
+              </p>
+            )}
+            <div className="modal-actions">
+              <button className="modal-primary" onClick={() => setCompareResult(null)}>
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sizeOpen && (
+        <div className="modal-backdrop" onClick={() => setSizeOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>サイズを指定して保存</h2>
+            <p className="modal-desc">
+              画像を含むPDFのファイルサイズを選べます。文字は常に鮮明なまま、
+              画像だけを縮小・再圧縮します（元の書類は変更しません）。
+            </p>
+            {(
+              [
+                {
+                  key: 'original',
+                  label: '原本品質（画像そのまま）',
+                  desc: '画像を一切変更しません。最も大きいサイズ。'
+                },
+                {
+                  key: 'standard',
+                  label: '標準（推奨）',
+                  desc: '画像を約200dpi・高画質JPEGに。印刷・共有向け。'
+                },
+                {
+                  key: 'light',
+                  label: '軽量（メール向け）',
+                  desc: '画像を約150dpiに。読めれば十分・最小サイズ。'
+                }
+              ] as { key: SaveProfile; label: string; desc: string }[]
+            ).map((o) => (
+              <label className="radio radio-row" key={o.key}>
+                <input
+                  type="radio"
+                  name="sizeProfile"
+                  checked={sizeProfile === o.key}
+                  onChange={() => setSizeProfile(o.key)}
+                />
+                <span>
+                  <b>{o.label}</b>
+                  <span className="hint">{o.desc}</span>
+                </span>
+              </label>
+            ))}
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setSizeOpen(false)}>
+                キャンセル
+              </button>
+              <button
+                className="modal-primary"
+                onClick={saveSized}
+                disabled={busy}
+              >
+                この設定で保存…
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {bindingOpen && (
@@ -1418,16 +1781,6 @@ export default function App(): React.JSX.Element {
         </div>
       )}
 
-      {licenseOpen && (
-        <LicenseDialog
-          state={license}
-          onClose={() => setLicenseOpen(false)}
-          onChange={(s) => setLicense(s)}
-        />
-      )}
-
-      <TrialBanner state={license} onOpenDialog={() => setLicenseOpen(true)} />
-
       <Toolbar
         hasDoc={!!doc}
         pendingCount={pending.length}
@@ -1452,6 +1805,7 @@ export default function App(): React.JSX.Element {
         canUndo={canUndo}
         canRedo={canRedo}
         onRedactByTerms={() => setTermsOpen(true)}
+        onHiddenText={openHiddenText}
         onRotateLeft={() => rotate(-90)}
         onRotateRight={() => rotate(90)}
         onBindingMargin={() => setBindingOpen(true)}
@@ -1465,7 +1819,39 @@ export default function App(): React.JSX.Element {
         onZoom={setZoom}
         onSave={requestSave}
         onSaveAs={saveAs}
+        onSaveSized={() => setSizeOpen(true)}
+        onSaveFlattened={saveFlattened}
+        onCleanForSubmission={() => setCleanConfirm(true)}
+        onCompareText={() => setCompareConfirm(true)}
       />
+
+      {hiddenWarning !== null && (
+        <div className="hidden-warning" role="alert">
+          <span className="hidden-warning-text">
+            ⚠ このファイルには画面に見えない
+            <b>隠し文字が {hiddenWarning} 箇所</b>
+            あります。相手方に渡す前に内容をご確認ください。
+          </span>
+          <span className="hidden-warning-actions">
+            <button
+              className="hidden-warning-btn"
+              onClick={() => {
+                setHiddenWarning(null)
+                void openHiddenText()
+              }}
+            >
+              確認・削除
+            </button>
+            <button
+              className="hidden-warning-x"
+              title="この警告を閉じる"
+              onClick={() => setHiddenWarning(null)}
+            >
+              ✕
+            </button>
+          </span>
+        </div>
+      )}
 
       <div className="body">
         {doc && (
@@ -1479,6 +1865,7 @@ export default function App(): React.JSX.Element {
               onSelect={navigateTo}
               onBulkDelete={bulkDelete}
               onBulkRotate={bulkRotate}
+              onReorder={reorder}
             />
             <div
               className="resizer"
@@ -1517,6 +1904,17 @@ export default function App(): React.JSX.Element {
                 </button>
                 <p className="welcome-drop">
                   PDF・Word・画像（PNG/JPEG など）をドラッグ＆ドロップでも開けます（最大10件）
+                </p>
+                <a
+                  className="welcome-affiliate"
+                  href="https://amzn.to/4ww1Pau"
+                  target="_blank"
+                  rel="noreferrer nofollow sponsored"
+                >
+                  🛒 お買い物はこちら（Amazon.co.jp）
+                </a>
+                <p className="welcome-affiliate-note">
+                  ※ 上記はAmazonアソシエイトのリンクです。リンク経由でご購入いただくと運営者に紹介料が入り、本アプリの無料提供を支えます（お客様の購入価格は変わりません）。
                 </p>
               </div>
 

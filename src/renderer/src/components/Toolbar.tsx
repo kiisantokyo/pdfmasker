@@ -23,6 +23,7 @@ interface Props {
   onSearchAdd: (keyword: string) => void
   onClearPending: () => void
   onRedactByTerms: () => void
+  onHiddenText: () => void
   onRotateLeft: () => void
   onRotateRight: () => void
   onBindingMargin: () => void
@@ -36,6 +37,10 @@ interface Props {
   onZoom: (z: number) => void
   onSave: () => void
   onSaveAs: () => void
+  onSaveSized: () => void
+  onSaveFlattened: () => void
+  onCleanForSubmission: () => void
+  onCompareText: () => void
 }
 
 export default function Toolbar(props: Props): React.JSX.Element {
@@ -227,14 +232,6 @@ export default function Toolbar(props: Props): React.JSX.Element {
           🔴 スタンプ
         </button>
 
-        <button
-          onClick={props.onClearMetadata}
-          disabled={d}
-          title="作成者・作成日時・作成アプリ名などの文書プロパティ（XMP含む）を確認し、消去します"
-        >
-          プロパティ確認・消去
-        </button>
-
         <span className="sep" />
 
         <label className="zoom">
@@ -292,9 +289,61 @@ export default function Toolbar(props: Props): React.JSX.Element {
               >
                 名前を付けて保存…
               </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setSaveMenu(false)
+                  props.onSaveSized()
+                }}
+              >
+                サイズを指定して保存…
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setSaveMenu(false)
+                  props.onSaveFlattened()
+                }}
+                title="全ページを画像化して保存（隠し文字・メタデータ等を原理的に完全除去）"
+              >
+                画像化して保存（隠し情報を完全除去）…
+              </button>
             </div>
           )}
         </div>
+      </div>
+
+      {/* Row 3 — 提出前の安全処理（隠し情報の確認・除去） */}
+      <div className="toolbar-row toolbar-row-security">
+        <span className="toolbar-group-label">提出前チェック：</span>
+        <button
+          onClick={props.onClearMetadata}
+          disabled={d}
+          title="作成者・作成日時・作成アプリ名などの文書プロパティ（XMP含む）を確認し、消去します"
+        >
+          プロパティ確認・消去
+        </button>
+        <button
+          onClick={props.onHiddenText}
+          disabled={d}
+          title="画面に表示されない隠し文字（透明テキスト）を確認し、削除します"
+        >
+          隠し文字を確認・削除
+        </button>
+        <button
+          onClick={props.onCompareText}
+          disabled={d}
+          title="各ページをOCRして「見えている文字」と「埋め込み文字」を照合し、あらゆる隠し方の文字を洗い出します（時間がかかります）"
+        >
+          隠し文字の徹底照合（OCR）
+        </button>
+        <button
+          onClick={props.onCleanForSubmission}
+          disabled={d}
+          title="提出前に、隠し文字・文書プロパティ・添付ファイル・JavaScriptをまとめて除去します（元に戻す可）"
+        >
+          提出前クリーニング
+        </button>
       </div>
     </div>
   )

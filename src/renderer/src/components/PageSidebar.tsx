@@ -111,7 +111,9 @@ function Thumb({
       : 0.707
   return (
     <div className="thumb-img" ref={ref} style={{ aspectRatio: String(aspect) }}>
-      {url ? <img src={url} alt={`page ${index + 1}`} /> : null}
+      {url ? (
+        <img src={url} alt={`page ${index + 1}`} draggable={false} />
+      ) : null}
     </div>
   )
 }
@@ -125,6 +127,7 @@ interface Props {
   onSelect: (index: number) => void
   onBulkDelete: (indices: number[]) => void
   onBulkRotate: (indices: number[], delta: RotateDelta) => void
+  onReorder: (indices: number[], to: number) => void
 }
 
 export default function PageSidebar({
@@ -135,11 +138,48 @@ export default function PageSidebar({
   refreshKey,
   onSelect,
   onBulkDelete,
-  onBulkRotate
+  onBulkRotate,
+  onReorder
 }: Props): React.JSX.Element {
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const anchor = useRef<number | null>(null)
   const activeRef = useRef<HTMLDivElement>(null)
+  // Drag-and-drop reorder state.
+  const dragging = useRef<number[] | null>(null)
+  const [dropGap, setDropGap] = useState<number | null>(null)
+
+  // The gap (0..pageCount) nearest the pointer within a thumbnail row.
+  const gapAt = (index: number, e: React.DragEvent): number => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return e.clientY > r.top + r.height / 2 ? index + 1 : index
+  }
+  const onDragStart = (index: number, e: React.DragEvent): void => {
+    // Drag the whole selection when the grabbed page is part of it.
+    dragging.current = checked.has(index)
+      ? [...checked].sort((a, b) => a - b)
+      : [index]
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+  const onDragOverItem = (index: number, e: React.DragEvent): void => {
+    if (!dragging.current) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDropGap(gapAt(index, e))
+  }
+  const onDropItem = (index: number, e: React.DragEvent): void => {
+    if (!dragging.current) return
+    e.preventDefault()
+    const to = gapAt(index, e)
+    const ids = dragging.current
+    dragging.current = null
+    setDropGap(null)
+    onReorder(ids, to)
+  }
+  const onDragEnd = (): void => {
+    dragging.current = null
+    setDropGap(null)
+  }
 
   // Selection is position-based, so reset it whenever the page set changes.
   useEffect(() => {
@@ -235,16 +275,27 @@ export default function PageSidebar({
           const pending = pendingCountByPage[p.index] ?? 0
           const isChecked = checked.has(p.index)
           return (
-            <li key={p.index}>
+            <li
+              key={p.index}
+              className={
+                (dropGap === p.index ? 'drop-before' : '') +
+                (dropGap === p.index + 1 ? ' drop-after' : '')
+              }
+            >
               <div
                 ref={p.index === currentPage ? activeRef : undefined}
+                draggable
                 className={
                   'page-item' +
                   (p.index === currentPage ? ' active' : '') +
                   (isChecked ? ' checked' : '')
                 }
-                title="クリック: 表示 / Ctrl+クリック: 複数選択 / Shift+クリック: 範囲選択"
+                title="クリック: 表示 / Ctrl+クリック: 複数選択 / Shift+クリック: 範囲選択 / ドラッグ: 並べ替え"
                 onClick={(e) => onItemClick(p.index, e)}
+                onDragStart={(e) => onDragStart(p.index, e)}
+                onDragOver={(e) => onDragOverItem(p.index, e)}
+                onDrop={(e) => onDropItem(p.index, e)}
+                onDragEnd={onDragEnd}
               >
                 <div className="thumb-top">
                   <input

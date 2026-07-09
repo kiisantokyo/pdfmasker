@@ -39,6 +39,11 @@ function naturalSort(a: string, b: string): number {
   })
 }
 
+/** Return a copy of `paths` sorted by file name in natural (2 < 10) order. */
+export function naturalSortPaths(paths: string[]): string[] {
+  return [...paths].sort(naturalSort)
+}
+
 /**
  * Ask Tesseract OSD which way the page is rotated. Returns the clockwise
  * correction (a PDF /Rotate value) to apply, or 0 when unknown/low-confidence.
