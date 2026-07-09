@@ -52,13 +52,26 @@
     "win": {
       "icon": "build/icon.ico",
       "target": [
-        "nsis"
+        "nsis",
+        "appx"
       ]
     },
     "nsis": {
       "artifactName": "pdfmasker-${version}-setup.${ext}",
       "oneClick": true,
       "perMachine": false
+    },
+    "appx": {
+      "identityName": "FAD1841F.374730C8EB1C6",
+      "publisher": "CN=DAEE2FED-5E38-4947-B9C2-28B71E76AEC2",
+      "publisherDisplayName": "弁護士法人コスモポリタン法律事務所",
+      "applicationId": "pdfmasker",
+      "displayName": "究極の墨消し",
+      "backgroundColor": "#1d3358",
+      "languages": [
+        "ja-JP",
+        "en-US"
+      ]
     }
   }
 }
