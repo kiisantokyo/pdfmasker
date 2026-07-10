@@ -431,6 +431,9 @@ body {
 .page-canvas.mode-text {
   cursor: text;
 }
+.page-canvas.mode-region {
+  cursor: crosshair;
+}
 .canvas-loading {
   position: absolute;
   top: 8px;
@@ -945,6 +948,31 @@ body {
 }
 
 /* Hidden-text warning banner (shown on open when hidden text is detected) */
+.region-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #eef4ff;
+  border-bottom: 1px solid #b9cdf3;
+  color: #1d3a8a;
+  font-size: 13px;
+}
+.region-hint-cancel {
+  padding: 5px 12px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.region-hint-cancel:hover {
+  background: #1d4ed8;
+}
+
 .hidden-warning {
   display: flex;
   align-items: center;

@@ -1,7 +1,15 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  nativeImage,
+  shell
+} from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
-import { IPC } from '../shared/types'
+import { DEFAULT_NAME_OPTIONS, IPC } from '../shared/types'
 import type {
   BindingMarginOptions,
   OpenMode,
@@ -9,13 +17,19 @@ import type {
   PageNumberOptions,
   RedactionRect,
   RotateDelta,
+  SaveNameOptions,
   SaveProfile,
   ScopedTerm,
   StampOptions
 } from '../shared/types'
 import * as pdf from './pdf-service'
 import * as license from './license-service'
-import { imagesToPdf, isImagePath, naturalSortPaths } from './convert-image'
+import {
+  imageBytesToPdf,
+  imagesToPdf,
+  isImagePath,
+  naturalSortPaths
+} from './convert-image'
 import { isWordPath, wordToPdf } from './convert-word'
 import { buildConcatenatedPdf } from './convert-merge'
 
@@ -36,27 +50,46 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`
 }
 
-/**
- * Default "save as" file name:
- * - multiple images → 「先頭ファイル名_N枚（墨消し）.pdf」
- * - otherwise       → 「yymmdd_元のファイル名（墨消し）.pdf」
- */
-function suggestedSaveName(): string {
+/** Base name (no date, no labels, no extension) for the open document. */
+function defaultBase(): string {
   if (openMeta?.kind === 'images') {
-    return `${openMeta.base}_${openMeta.count}枚（墨消し）.pdf`
+    return `${openMeta.base}_${openMeta.count}枚`
   }
-  const d = new Date()
-  const yy = pad2(d.getFullYear() % 100)
-  const mm = pad2(d.getMonth() + 1)
-  const dd = pad2(d.getDate())
-  const base = openMeta?.base ?? 'document'
-  return `${yy}${mm}${dd}_${base}（墨消し）.pdf`
+  return openMeta?.base ?? 'document'
+}
+
+/**
+ * Suggested save file name built from the chosen name decorations:
+ * 「YYMMDD_元名（墨消し＋編集済み）.ext」 — date prefix toggled by `opts`, and the
+ * chosen labels combined inside one bracket (「（墨消し）」/「（編集済み）」/both).
+ */
+function suggestedSaveName(
+  opts: SaveNameOptions = DEFAULT_NAME_OPTIONS,
+  ext = '.pdf'
+): string {
+  let name = defaultBase()
+  if (opts.datePrefix) {
+    const d = new Date()
+    const yy = pad2(d.getFullYear() % 100)
+    const mm = pad2(d.getMonth() + 1)
+    const dd = pad2(d.getDate())
+    name = `${yy}${mm}${dd}_${name}`
+  }
+  // Combine chosen labels inside a single bracket: 「（墨消し＋編集済み）」.
+  const labels: string[] = []
+  if (opts.redactLabel) labels.push('墨消し')
+  if (opts.editLabel) labels.push('編集済み')
+  if (labels.length > 0) name += `（${labels.join('＋')}）`
+  return name + ext
 }
 
 /** Absolute default path for the save dialog: source folder + rule-based name. */
-function suggestedSavePath(): string {
+function suggestedSavePath(
+  opts: SaveNameOptions = DEFAULT_NAME_OPTIONS,
+  ext = '.pdf'
+): string {
   const dir = openMeta?.dir ?? app.getPath('documents')
-  return join(dir, suggestedSaveName())
+  return join(dir, suggestedSaveName(opts, ext))
 }
 
 // Whether the renderer currently has unsaved work (applied-but-unsaved edits or
@@ -400,33 +433,71 @@ function registerIpc(): void {
     return { saved: true, path }
   })
 
-  ipcMain.handle(IPC.saveAs, async () => {
-    if (!license.getState().canSave) return { saved: false, gated: true }
-    // Always propose the rule-based name in the source folder. `current` (a path
-    // from a previous save) is only used for plain 上書き保存, not as the default.
-    const result = await dialog.showSaveDialog({
-      title: 'Save PDF As',
-      defaultPath: suggestedSavePath(),
-      filters: [{ name: 'PDF', extensions: ['pdf'] }]
-    })
-    if (result.canceled || !result.filePath) return { saved: false }
-    await writeFile(result.filePath, pdf.saveToBuffer())
-    pdf.markSavedAt(result.filePath)
-    return { saved: true, path: result.filePath }
+  ipcMain.handle(
+    IPC.saveAsSized,
+    async (_e, profile: SaveProfile, nameOpts?: SaveNameOptions) => {
+      if (!license.getState().canSave) return { saved: false, gated: true }
+      const result = await dialog.showSaveDialog({
+        title: 'Save PDF As',
+        defaultPath: suggestedSavePath(nameOpts),
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+      })
+      if (result.canceled || !result.filePath) return { saved: false }
+      const bytes = pdf.saveToBufferProfiled(profile)
+      await writeFile(result.filePath, bytes)
+      pdf.markSavedAt(result.filePath)
+      return { saved: true, path: result.filePath, size: bytes.length }
+    }
+  )
+
+  // Export the given page as a PNG image (current page only). A separate export
+  // artifact — it never becomes "the document", so no markSavedAt.
+  ipcMain.handle(
+    IPC.saveAsImage,
+    async (_e, index: number, nameOpts?: SaveNameOptions) => {
+      if (!license.getState().canSave) return { saved: false, gated: true }
+      const result = await dialog.showSaveDialog({
+        title: 'このページをPNG画像で保存',
+        defaultPath: suggestedSavePath(nameOpts, '.png'),
+        filters: [{ name: 'PNG', extensions: ['png'] }]
+      })
+      if (result.canceled || !result.filePath) return { saved: false }
+      const bytes = pdf.renderPageImage(index)
+      await writeFile(result.filePath, bytes)
+      return { saved: true, path: result.filePath, size: bytes.length }
+    }
+  )
+
+  // Copy the given page to the clipboard as an image (current page). No license
+  // gate: this is an on-screen convenience, not a file export.
+  ipcMain.handle(IPC.copyPageImage, (_e, index: number) => {
+    const png = pdf.renderPageImage(index)
+    clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png)))
+    return { ok: true }
   })
 
-  ipcMain.handle(IPC.saveAsSized, async (_e, profile: SaveProfile) => {
-    if (!license.getState().canSave) return { saved: false, gated: true }
-    const result = await dialog.showSaveDialog({
-      title: 'Save PDF As',
-      defaultPath: suggestedSavePath(),
-      filters: [{ name: 'PDF', extensions: ['pdf'] }]
-    })
-    if (result.canceled || !result.filePath) return { saved: false }
-    const bytes = pdf.saveToBufferProfiled(profile)
-    await writeFile(result.filePath, bytes)
-    pdf.markSavedAt(result.filePath)
-    return { saved: true, path: result.filePath, size: bytes.length }
+  // Copy a rectangular region of the given page to the clipboard as an image.
+  ipcMain.handle(
+    IPC.copyPageRegionImage,
+    (_e, index: number, rect: RedactionRect) => {
+      const png = pdf.renderRegionImage(index, rect)
+      clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(png)))
+      return { ok: true }
+    }
+  )
+
+  // Ctrl+V on the welcome screen: build a 1-page PDF from a clipboard image and
+  // start editing it. Silently does nothing when the clipboard holds no image.
+  ipcMain.handle(IPC.pasteFromClipboard, async () => {
+    const image = clipboard.readImage()
+    if (image.isEmpty()) return null
+    const png = new Uint8Array(image.toPNG())
+    const osdCache = join(app.getPath('userData'), 'tessdata')
+    const bytes = await imageBytesToPdf([png], osdCache)
+    const base = 'クリップボード画像'
+    const info = pdf.loadDocument(bytes, `${base}.pdf`, null)
+    openMeta = { kind: 'images', base, count: 1, dir: null }
+    return { info, ocr: 'auto' as const }
   })
 
   ipcMain.handle(IPC.saveAsFlattened, async () => {

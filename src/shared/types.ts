@@ -78,6 +78,28 @@ export interface TermCount {
  */
 export type SaveProfile = 'original' | 'standard' | 'light'
 
+/** Raster image formats for page image export (PNG only for now). */
+export type ImageFormat = 'png'
+
+/**
+ * Which decorations to include in a suggested save file name.
+ * - datePrefix : lead with 「YYMMDD_」.
+ * - redactLabel: append 「（墨消し）」.
+ * - editLabel  : append 「（編集済み）」.
+ */
+export interface SaveNameOptions {
+  datePrefix: boolean
+  redactLabel: boolean
+  editLabel: boolean
+}
+
+/** Default name decorations: date prefix + 「（墨消し）」, matching prior behavior. */
+export const DEFAULT_NAME_OPTIONS: SaveNameOptions = {
+  datePrefix: true,
+  redactLabel: true,
+  editLabel: false
+}
+
 /** What 提出前クリーニング removed (all in one undoable step). */
 export interface CleanReport {
   info: DocumentInfo
@@ -302,9 +324,12 @@ export const IPC = {
   undo: 'pdf:undo',
   redo: 'pdf:redo',
   save: 'pdf:save',
-  saveAs: 'pdf:saveAs',
   saveAsSized: 'pdf:saveAsSized',
   saveAsFlattened: 'pdf:saveAsFlattened',
+  saveAsImage: 'pdf:saveAsImage',
+  copyPageImage: 'pdf:copyPageImage',
+  copyPageRegionImage: 'pdf:copyPageRegionImage',
+  pasteFromClipboard: 'pdf:pasteFromClipboard',
   cleanForSubmission: 'pdf:cleanForSubmission',
   hasUnsavedChanges: 'pdf:hasUnsavedChanges',
   licenseStatus: 'license:status',

@@ -16,6 +16,7 @@ import type {
   PageNumberOptions,
   RedactionRect,
   RotateDelta,
+  SaveNameOptions,
   SaveProfile,
   ScopedTerm,
   StampOptions,
@@ -157,11 +158,31 @@ const api = {
   undo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.undo),
   redo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.redo),
   save: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.save),
-  saveAs: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.saveAs),
-  saveAsSized: (profile: SaveProfile): Promise<SaveResult> =>
-    ipcRenderer.invoke(IPC.saveAsSized, profile),
+  saveAsSized: (
+    profile: SaveProfile,
+    nameOpts?: SaveNameOptions
+  ): Promise<SaveResult> =>
+    ipcRenderer.invoke(IPC.saveAsSized, profile, nameOpts),
   saveAsFlattened: (): Promise<SaveResult> =>
     ipcRenderer.invoke(IPC.saveAsFlattened),
+  /** Export the given page as a PNG image (current page only). */
+  saveAsImage: (
+    index: number,
+    nameOpts?: SaveNameOptions
+  ): Promise<SaveResult> =>
+    ipcRenderer.invoke(IPC.saveAsImage, index, nameOpts),
+  /** Copy the given page to the clipboard as an image. */
+  copyPageImage: (index: number): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.copyPageImage, index),
+  /** Copy a rectangular region (page-space pt) of a page to the clipboard. */
+  copyPageRegionImage: (
+    index: number,
+    rect: RedactionRect
+  ): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.copyPageRegionImage, index, rect),
+  /** Ctrl+V on the welcome screen: load a clipboard image, or null if none. */
+  pasteFromClipboard: (): Promise<OpenResult | null> =>
+    ipcRenderer.invoke(IPC.pasteFromClipboard),
   cleanForSubmission: (): Promise<CleanReport> =>
     ipcRenderer.invoke(IPC.cleanForSubmission),
   hasUnsavedChanges: (): Promise<boolean> =>

@@ -28,6 +28,15 @@ interface Props {
   onZoomChange: (zoom: number) => void
   /** Bump to force a re-fetch of the rendered page (e.g. after redaction). */
   refreshKey: number
+  /**
+   * One-shot "copy a region" mode: while true, a drag draws a rectangle and,
+   * on release, hands it to `onRegionCopy` instead of selecting for redaction.
+   */
+  regionCopyMode?: boolean
+  onRegionCopy?: (
+    pageIndex: number,
+    rect: { x0: number; y0: number; x1: number; y1: number }
+  ) => void
 }
 
 interface DragState {
@@ -47,7 +56,9 @@ export default function PageCanvas({
   onCtrlClick,
   onTextSelect,
   onZoomChange,
-  refreshKey
+  refreshKey,
+  regionCopyMode = false,
+  onRegionCopy
 }: Props): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -114,8 +125,8 @@ export default function PageCanvas({
     // Live text selection preview while dragging.
     for (const r of textPreview) fillRectPt(ctx, r)
 
-    // Freehand rectangle preview (rect mode only) — blue.
-    if (drag && selectMode === 'rect') {
+    // Freehand rectangle preview (rect mode or region-copy mode) — blue.
+    if (drag && (regionCopyMode || selectMode === 'rect')) {
       const x = Math.min(drag.x0, drag.x1)
       const y = Math.min(drag.y0, drag.y1)
       const w = Math.abs(drag.x1 - drag.x0)
@@ -125,7 +136,7 @@ export default function PageCanvas({
       ctx.fillRect(x, y, w, h)
       ctx.strokeRect(x, y, w, h)
     }
-  }, [pendingRects, textPreview, drag, selectMode, fillRectPt])
+  }, [pendingRects, textPreview, drag, selectMode, regionCopyMode, fillRectPt])
 
   useEffect(() => {
     redraw()
@@ -162,7 +173,7 @@ export default function PageCanvas({
     const { x, y } = toCanvasXY(e)
     setDrag({ ...drag, x1: x, y1: y })
 
-    if (selectMode === 'text') {
+    if (selectMode === 'text' && !regionCopyMode) {
       const moved = Math.hypot(x - drag.x0, y - drag.y0)
       const now = performance.now()
       if (moved > 4 && now - lastQuery.current > 40) {
@@ -179,6 +190,21 @@ export default function PageCanvas({
     const dx = Math.abs(drag.x1 - drag.x0)
     const dy = Math.abs(drag.y1 - drag.y0)
     const isClick = dx <= 4 && dy <= 4
+
+    // Region-copy mode: a real drag copies that rectangle; a click does nothing.
+    if (regionCopyMode) {
+      if (!isClick && onRegionCopy) {
+        onRegionCopy(pageIndex, {
+          x0: Math.min(drag.x0, drag.x1) / zoom,
+          y0: Math.min(drag.y0, drag.y1) / zoom,
+          x1: Math.max(drag.x0, drag.x1) / zoom,
+          y1: Math.max(drag.y0, drag.y1) / zoom
+        })
+      }
+      setDrag(null)
+      setTextPreview([])
+      return
+    }
 
     if (isClick) {
       const pt = { x: drag.x0 / zoom, y: drag.y0 / zoom }
@@ -221,7 +247,14 @@ export default function PageCanvas({
         ref={canvasRef}
         width={size.w}
         height={size.h}
-        className={'page-canvas' + (selectMode === 'text' ? ' mode-text' : '')}
+        className={
+          'page-canvas' +
+          (regionCopyMode
+            ? ' mode-region'
+            : selectMode === 'text'
+              ? ' mode-text'
+              : '')
+        }
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

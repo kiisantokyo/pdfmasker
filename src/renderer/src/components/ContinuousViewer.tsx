@@ -24,6 +24,12 @@ interface Props {
     clientPt: { x: number; y: number }
   ) => void
   onZoomChange: (z: number) => void
+  /** One-shot region-copy mode (drag a rectangle to copy it to the clipboard). */
+  regionCopyMode?: boolean
+  onRegionCopy?: (
+    pageIndex: number,
+    rect: { x0: number; y0: number; x1: number; y1: number }
+  ) => void
 }
 
 export default function ContinuousViewer({
@@ -38,7 +44,9 @@ export default function ContinuousViewer({
   onWordClick,
   onCtrlClick,
   onTextSelect,
-  onZoomChange
+  onZoomChange,
+  regionCopyMode = false,
+  onRegionCopy
 }: Props): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const wrapRefs = useRef<Array<HTMLDivElement | null>>([])
@@ -112,6 +120,8 @@ export default function ContinuousViewer({
                 onCtrlClick={onCtrlClick}
                 onTextSelect={onTextSelect}
                 onZoomChange={onZoomChange}
+                regionCopyMode={regionCopyMode}
+                onRegionCopy={onRegionCopy}
               />
             ) : (
               <div className="cv-placeholder" style={{ height: h }} />

@@ -330,6 +330,73 @@ export function renderPage(
 }
 
 /**
+ * Render a single page to PNG bytes at a given DPI, for image export / clipboard
+ * copy. Redactions are already destructive in the document, so the rasterised
+ * image never carries removed data. showExtras=true so yellow highlights render.
+ */
+export function renderPageImage(index: number, dpi = 200): Uint8Array {
+  const d = requireDoc()
+  const page = d.loadPage(index)
+  const zoom = dpi / 72
+  const matrix = mupdf.Matrix.scale(zoom, zoom)
+  const pix = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false, true)
+  try {
+    return pix.asPNG()
+  } finally {
+    pix.destroy?.()
+  }
+}
+
+/**
+ * Render just a rectangular region of a page to PNG bytes, for "copy region to
+ * clipboard". `rect` is in page space (PDF points, top-left origin — the same
+ * space the renderer produces from canvas px ÷ zoom). The full page is rendered
+ * at `dpi`, then cropped to the rect with `warp` (axis-aligned → no distortion).
+ */
+export function renderRegionImage(
+  index: number,
+  rect: { x0: number; y0: number; x1: number; y1: number },
+  dpi = 200
+): Uint8Array {
+  const d = requireDoc()
+  const page = d.loadPage(index)
+  const zoom = dpi / 72
+  const matrix = mupdf.Matrix.scale(zoom, zoom)
+  const pix = page.toPixmap(matrix, mupdf.ColorSpace.DeviceRGB, false, true)
+  const extra: mupdf.Pixmap[] = []
+  try {
+    const pw = pix.getWidth()
+    const ph = pix.getHeight()
+    // page-pt rect → device px, clamped to the rendered pixmap.
+    const rx0 = Math.max(0, Math.min(rect.x0, rect.x1) * zoom)
+    const ry0 = Math.max(0, Math.min(rect.y0, rect.y1) * zoom)
+    const rx1 = Math.min(pw, Math.max(rect.x0, rect.x1) * zoom)
+    const ry1 = Math.min(ph, Math.max(rect.y0, rect.y1) * zoom)
+    const wPx = Math.max(1, Math.round(rx1 - rx0))
+    const hPx = Math.max(1, Math.round(ry1 - ry0))
+    // Whole-page (or degenerate) selection → just return the full render.
+    const isWhole =
+      rx0 <= 0.5 && ry0 <= 0.5 && rx1 >= pw - 0.5 && ry1 >= ph - 0.5
+    if (isWhole || rx1 - rx0 < 1 || ry1 - ry0 < 1) return pix.asPNG()
+    const crop = pix.warp(
+      [
+        [rx0, ry0],
+        [rx1, ry0],
+        [rx1, ry1],
+        [rx0, ry1]
+      ],
+      wPx,
+      hPx
+    )
+    extra.push(crop)
+    return crop.asPNG()
+  } finally {
+    for (const p of extra) p.destroy?.()
+    pix.destroy?.()
+  }
+}
+
+/**
  * Apply TRUE redaction: removes the underlying text/image content under each
  * rect, not just a cosmetic box. This is the security-critical operation.
  *

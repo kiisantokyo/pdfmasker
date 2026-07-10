@@ -12,12 +12,13 @@ import type {
   PageNumberPosition,
   RedactionRect,
   RotateDelta,
+  SaveNameOptions,
   SaveProfile,
   SelectMode,
   StampKind,
   StampPosition
 } from '@shared/types'
-import { STAMP_LABELS } from '@shared/types'
+import { DEFAULT_NAME_OPTIONS, STAMP_LABELS } from '@shared/types'
 import { pdfApi } from './lib/api'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
@@ -98,7 +99,12 @@ export default function App(): React.JSX.Element {
   const [termsOpen, setTermsOpen] = useState(false)
   // サイズを指定して保存モーダル
   const [sizeOpen, setSizeOpen] = useState(false)
-  const [sizeProfile, setSizeProfile] = useState<SaveProfile>('standard')
+  // 既定は原本品質（可逆）。墨消し原本を勝手にJPEG化・縮小しないため。
+  const [sizeProfile, setSizeProfile] = useState<SaveProfile>('original')
+  // 保存ファイル名の項目（YYMMDD前置き・（墨消し）・（編集済み））
+  const [nameOpts, setNameOpts] = useState<SaveNameOptions>(DEFAULT_NAME_OPTIONS)
+  // 範囲を選んでクリップボードにコピー（ワンショット）。true の間だけ十字ドラッグ。
+  const [copyRegion, setCopyRegion] = useState(false)
   // 隠し文字（透明テキスト）モーダル
   const [hiddenReport, setHiddenReport] = useState<HiddenTextReport | null>(null)
   // 開いたファイルに隠し文字があった件数（警告バナー用。null=警告なし）
@@ -251,6 +257,17 @@ export default function App(): React.JSX.Element {
       if (res.ocr === 'auto') await runOcr()
       else if (res.ocr === 'prompt') setOcrPrompt(true)
     }, '開く')
+
+  // Ctrl+V on the welcome screen: load a clipboard image and start editing.
+  // Silently no-op when the clipboard holds no image.
+  const pasteImage = (): Promise<void> =>
+    run(async () => {
+      const res = await pdfApi.pasteFromClipboard()
+      if (!res) return
+      applyOpened(res.info)
+      if (res.ocr === 'auto') await runOcr()
+      else if (res.ocr === 'prompt') setOcrPrompt(true)
+    }, '貼り付け')
 
   const runOcr = (): Promise<void> =>
     run(async () => {
@@ -610,7 +627,8 @@ export default function App(): React.JSX.Element {
         return
       }
       if (res.needsPath) {
-        await saveAs()
+        // First save (no path yet) → open the 名前を付けて保存 dialog.
+        setSizeOpen(true)
         return
       }
       if (res.saved) {
@@ -647,24 +665,44 @@ export default function App(): React.JSX.Element {
     else void save()
   }
 
-  const saveAs = (): Promise<void> =>
+  // Export the current page as a PNG image (separate artifact; doc unchanged).
+  const saveImage = (): Promise<void> =>
     run(async () => {
-      const res = await pdfApi.saveAs()
+      const res = await pdfApi.saveAsImage(currentPage, nameOpts)
       if (res.gated) {
         onSaveGated()
         return
       }
       if (res.saved) {
-        setDirty(false)
-        if (doc) setDoc({ ...doc, path: res.path ?? doc.path })
-        setStatus(`${res.path} に保存しました。`)
+        setStatus(`ページ ${currentPage + 1} をPNG画像で保存しました：${res.path}`)
       }
-    }, '名前を付けて保存')
+    }, 'PNG画像で保存')
+
+  // Copy the current page to the clipboard as an image.
+  const copyImage = (): Promise<void> =>
+    run(async () => {
+      await pdfApi.copyPageImage(currentPage)
+      setStatus(`ページ ${currentPage + 1} を画像としてクリップボードにコピーしました。`)
+    }, '画像をコピー')
+
+  // One-shot region copy: called when the user finishes dragging a rectangle.
+  const onRegionCopy = (
+    pageIndex: number,
+    rect: { x0: number; y0: number; x1: number; y1: number }
+  ): Promise<void> =>
+    run(async () => {
+      setCopyRegion(false)
+      await pdfApi.copyPageRegionImage(pageIndex, {
+        pageIndex,
+        ...rect
+      })
+      setStatus('選択した範囲を画像としてクリップボードにコピーしました。')
+    }, '範囲をコピー')
 
   // Save with an image-size profile (opens a picker; shows resulting size).
   const saveSized = (): Promise<void> =>
     run(async () => {
-      const res = await pdfApi.saveAsSized(sizeProfile)
+      const res = await pdfApi.saveAsSized(sizeProfile, nameOpts)
       if (res.gated) {
         onSaveGated()
         return
@@ -676,7 +714,7 @@ export default function App(): React.JSX.Element {
         const mb = res.size ? (res.size / (1024 * 1024)).toFixed(2) : '?'
         setStatus(`${res.path} に保存しました（${mb} MB）。`)
       }
-    }, 'サイズを指定して保存')
+    }, '名前を付けて保存')
 
   // Export an image-only PDF (structurally removes all hidden data). Separate
   // artifact — does not change the editable document.
@@ -690,9 +728,9 @@ export default function App(): React.JSX.Element {
       }
       if (res.saved) {
         const mb = res.size ? (res.size / (1024 * 1024)).toFixed(2) : '?'
-        setStatus(`画像化して保存しました（${mb} MB・隠し情報なし）：${res.path}`)
+        setStatus(`画像化PDFで保存しました（${mb} MB・隠し情報なし）：${res.path}`)
       }
-    }, '画像化して保存')
+    }, '画像化PDFで保存')
 
   // 提出前クリーニング: strip hidden text, metadata, attachments, JS (one undo).
   const cleanSubmission = (): Promise<void> =>
@@ -862,6 +900,48 @@ export default function App(): React.JSX.Element {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [doUndo, doRedo])
+
+  // Clipboard shortcuts: Ctrl+V on the welcome screen (no doc) pastes a clipboard
+  // image; Ctrl+C with a doc open copies the current page as an image. Refs keep
+  // the listener stable while reading the latest doc state / handlers.
+  const hasDocRef = useRef(!!doc)
+  hasDocRef.current = !!doc
+  const pasteImageRef = useRef(pasteImage)
+  pasteImageRef.current = pasteImage
+  const copyImageRef = useRef(copyImage)
+  copyImageRef.current = copyImage
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const key = e.key.toLowerCase()
+      if (key !== 'v' && key !== 'c') return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (key === 'v') {
+        if (hasDocRef.current) return // paste only when nothing is open yet
+        e.preventDefault()
+        void pasteImageRef.current()
+      } else {
+        if (!hasDocRef.current) return // nothing to copy without a document
+        // Let a real text selection copy natively instead of the page image.
+        if (window.getSelection()?.toString()) return
+        e.preventDefault()
+        void copyImageRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // Esc cancels the one-shot region-copy mode.
+  useEffect(() => {
+    if (!copyRegion) return
+    const onEsc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setCopyRegion(false)
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [copyRegion])
 
   const onDragOver = (e: React.DragEvent): void => {
     if (Array.from(e.dataTransfer.types).includes('Files')) {
@@ -1156,7 +1236,7 @@ export default function App(): React.JSX.Element {
             <p className="modal-warn">
               ⚠ ただし、<b>画像の裏に隠した文字や特殊な方法の隠し文字は除去できません</b>。
               あらゆる隠し方を確実に取り除くには「<b>隠し文字の徹底照合（OCR）</b>」で確認のうえ、
-              「保存 ▸ <b>画像化して保存</b>」で書き出すのが最も確実です。
+              「保存 ▸ <b>画像化PDFで保存</b>」で書き出すのが最も確実です。
             </p>
             <p className="modal-desc">
               実行後は「元に戻す（Ctrl+Z）」で復元できます。
@@ -1286,7 +1366,7 @@ export default function App(): React.JSX.Element {
                 </div>
                 <p className="modal-warn">
                   「埋め込み」は画面に見えないのに文書内に存在する文字です。検索・コピー・AI分析ではこちらが読まれます。
-                  確実に除去するには「保存 ▸ 画像化して保存（隠し情報を完全除去）」をご利用ください。
+                  確実に除去するには「保存 ▸ 画像化PDFで保存（隠し情報を完全除去）」をご利用ください。
                 </p>
               </>
             ) : (
@@ -1306,43 +1386,86 @@ export default function App(): React.JSX.Element {
       {sizeOpen && (
         <div className="modal-backdrop" onClick={() => setSizeOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>サイズを指定して保存</h2>
+            <h2>名前を付けて保存</h2>
             <p className="modal-desc">
-              画像を含むPDFのファイルサイズを選べます。文字は常に鮮明なまま、
-              画像だけを縮小・再圧縮します（元の書類は変更しません）。
+              ファイル名の項目と、画像を含む場合のファイルサイズを選んで保存します
+              （元の書類は変更しません）。
             </p>
-            {(
-              [
-                {
-                  key: 'original',
-                  label: '原本品質（画像そのまま）',
-                  desc: '画像を一切変更しません。最も大きいサイズ。'
-                },
-                {
-                  key: 'standard',
-                  label: '標準（推奨）',
-                  desc: '画像を約200dpi・高画質JPEGに。印刷・共有向け。'
-                },
-                {
-                  key: 'light',
-                  label: '軽量（メール向け）',
-                  desc: '画像を約150dpiに。読めれば十分・最小サイズ。'
-                }
-              ] as { key: SaveProfile; label: string; desc: string }[]
-            ).map((o) => (
-              <label className="radio radio-row" key={o.key}>
+            <div className="field">
+              <span className="field-label">ファイル名に付ける項目</span>
+              <label className="radio radio-row">
                 <input
-                  type="radio"
-                  name="sizeProfile"
-                  checked={sizeProfile === o.key}
-                  onChange={() => setSizeProfile(o.key)}
+                  type="checkbox"
+                  checked={nameOpts.datePrefix}
+                  onChange={(e) =>
+                    setNameOpts((o) => ({ ...o, datePrefix: e.target.checked }))
+                  }
                 />
                 <span>
-                  <b>{o.label}</b>
-                  <span className="hint">{o.desc}</span>
+                  <b>冒頭に日付（YYMMDD）</b>
+                  <span className="hint">例: 250710_〜</span>
                 </span>
               </label>
-            ))}
+              <label className="radio radio-row">
+                <input
+                  type="checkbox"
+                  checked={nameOpts.redactLabel}
+                  onChange={(e) =>
+                    setNameOpts((o) => ({ ...o, redactLabel: e.target.checked }))
+                  }
+                />
+                <span>
+                  <b>「（墨消し）」を付ける</b>
+                </span>
+              </label>
+              <label className="radio radio-row">
+                <input
+                  type="checkbox"
+                  checked={nameOpts.editLabel}
+                  onChange={(e) =>
+                    setNameOpts((o) => ({ ...o, editLabel: e.target.checked }))
+                  }
+                />
+                <span>
+                  <b>「（編集済み）」を付ける</b>
+                </span>
+              </label>
+            </div>
+            <div className="field">
+              <span className="field-label">ファイルサイズ（画像を含む場合）</span>
+              {(
+                [
+                  {
+                    key: 'original',
+                    label: '原本品質（推奨・画像そのまま）',
+                    desc: '画像を一切変更しません。墨消し原本はこれが安全。'
+                  },
+                  {
+                    key: 'standard',
+                    label: '標準（軽量化）',
+                    desc: '画像を約200dpi・高画質JPEGに。印刷・共有向け。'
+                  },
+                  {
+                    key: 'light',
+                    label: '軽量（メール向け）',
+                    desc: '画像を約150dpiに。読めれば十分・最小サイズ。'
+                  }
+                ] as { key: SaveProfile; label: string; desc: string }[]
+              ).map((o) => (
+                <label className="radio radio-row" key={o.key}>
+                  <input
+                    type="radio"
+                    name="sizeProfile"
+                    checked={sizeProfile === o.key}
+                    onChange={() => setSizeProfile(o.key)}
+                  />
+                  <span>
+                    <b>{o.label}</b>
+                    <span className="hint">{o.desc}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
             <div className="modal-actions">
               <button className="modal-cancel" onClick={() => setSizeOpen(false)}>
                 キャンセル
@@ -1352,7 +1475,7 @@ export default function App(): React.JSX.Element {
                 onClick={saveSized}
                 disabled={busy}
               >
-                この設定で保存…
+                この内容で保存…
               </button>
             </div>
           </div>
@@ -1828,12 +1951,25 @@ export default function App(): React.JSX.Element {
         onMoveDown={() => move(1)}
         onZoom={setZoom}
         onSave={requestSave}
-        onSaveAs={saveAs}
         onSaveSized={() => setSizeOpen(true)}
+        onSaveImage={saveImage}
+        onCopyImage={copyImage}
         onSaveFlattened={saveFlattened}
         onCleanForSubmission={() => setCleanConfirm(true)}
         onCompareText={() => setCompareConfirm(true)}
+        onCopyRegion={() => setCopyRegion(true)}
       />
+
+      {copyRegion && (
+        <div className="region-hint" role="status">
+          <span>
+            コピーする範囲を<b>ドラッグ</b>してください。
+          </span>
+          <button className="region-hint-cancel" onClick={() => setCopyRegion(false)}>
+            取消（Esc）
+          </button>
+        </div>
+      )}
 
       {hiddenWarning !== null && (
         <div className="hidden-warning" role="alert">
@@ -1899,6 +2035,8 @@ export default function App(): React.JSX.Element {
             onCtrlClick={onCtrlClick}
             onTextSelect={onTextSelect}
             onZoomChange={clampZoom}
+            regionCopyMode={copyRegion}
+            onRegionCopy={onRegionCopy}
           />
         ) : (
           <main className="viewer">
@@ -1913,7 +2051,9 @@ export default function App(): React.JSX.Element {
                   ファイルを開く
                 </button>
                 <p className="welcome-drop">
-                  PDF・Word・画像（PNG/JPEG など）をドラッグ＆ドロップでも開けます（最大10件）
+                  PDF・Word・画像（PNG/JPEG など）をドラッグ＆ドロップでも開けます（最大10件）。
+                  <br />
+                  クリップボードの画像は <b>Ctrl+V</b> で貼り付けて編集できます。
                 </p>
                 <a
                   className="welcome-affiliate"

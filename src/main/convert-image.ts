@@ -76,6 +76,24 @@ export async function imagesToPdf(
   osdCachePath: string
 ): Promise<Uint8Array> {
   const sorted = [...paths].sort(naturalSort)
+  const buffers: Uint8Array[] = []
+  for (const p of sorted) {
+    const bytes = await readFile(p)
+    buffers.push(new Uint8Array(bytes))
+  }
+  return imageBytesToPdf(buffers, osdCachePath)
+}
+
+/**
+ * Core of {@link imagesToPdf}: build a single PDF from already-loaded image
+ * bytes, in the given order. Used for both dropped files and clipboard paste
+ * (which has no file path). Each image gets a 20mm margin; orientation is
+ * best-effort auto-corrected via OSD when confident.
+ */
+export async function imageBytesToPdf(
+  images: Uint8Array[],
+  osdCachePath: string
+): Promise<Uint8Array> {
   const pdf = new mupdf.PDFDocument()
 
   let worker: Tesseract.Worker | null = null
@@ -88,9 +106,8 @@ export async function imagesToPdf(
   }
 
   try {
-    for (const p of sorted) {
-      const bytes = await readFile(p)
-      const img = new mupdf.Image(new Uint8Array(bytes))
+    for (const bytes of images) {
+      const img = new mupdf.Image(bytes)
       const wpx = img.getWidth()
       const hpx = img.getHeight()
       const xres = img.getXResolution()

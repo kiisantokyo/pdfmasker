@@ -36,8 +36,10 @@ interface Props {
   onMoveDown: () => void
   onZoom: (z: number) => void
   onSave: () => void
-  onSaveAs: () => void
   onSaveSized: () => void
+  onSaveImage: () => void
+  onCopyImage: () => void
+  onCopyRegion: () => void
   onSaveFlattened: () => void
   onCleanForSubmission: () => void
   onCompareText: () => void
@@ -284,7 +286,7 @@ export default function Toolbar(props: Props): React.JSX.Element {
                 role="menuitem"
                 onClick={() => {
                   setSaveMenu(false)
-                  props.onSaveAs()
+                  props.onSaveSized()
                 }}
               >
                 名前を付けて保存…
@@ -293,10 +295,31 @@ export default function Toolbar(props: Props): React.JSX.Element {
                 role="menuitem"
                 onClick={() => {
                   setSaveMenu(false)
-                  props.onSaveSized()
+                  props.onSaveImage()
                 }}
+                title="現在のページを1枚のPNG画像ファイルとして保存します"
               >
-                サイズを指定して保存…
+                このページをPNG画像で保存…
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setSaveMenu(false)
+                  props.onCopyImage()
+                }}
+                title="現在のページを画像としてクリップボードにコピーします（Ctrl+C）"
+              >
+                クリップボードにコピー（Ctrl + C）
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setSaveMenu(false)
+                  props.onCopyRegion()
+                }}
+                title="ドラッグした矩形の範囲だけを画像としてクリップボードにコピーします"
+              >
+                クリップボードへコピー（矩形選択）…
               </button>
               <button
                 role="menuitem"
@@ -304,9 +327,9 @@ export default function Toolbar(props: Props): React.JSX.Element {
                   setSaveMenu(false)
                   props.onSaveFlattened()
                 }}
-                title="全ページを画像化して保存（隠し文字・メタデータ等を原理的に完全除去）"
+                title="全ページを画像化したPDFとして保存（隠し文字・メタデータ等を原理的に完全除去）"
               >
-                画像化して保存（隠し情報を完全除去）…
+                画像化PDFで保存（隠し情報を完全除去）…
               </button>
             </div>
           )}
