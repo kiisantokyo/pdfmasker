@@ -83,3 +83,21 @@ markdown-instruction import, binding margin, delete/move/rotate page, save / sav
 Not yet: undo/redo, manual rect deletion, text/stamp annotations, OCR for
 scanned PDFs, password-protected PDFs, higher-accuracy proper-noun detection
 (e.g. a bundled morphological analyzer like kuromoji).
+
+## License
+
+Copyright © 2026 弁護士法人コスモポリタン法律事務所 (Cosmopolitan Law Office)
+
+This program is **free software**: you can redistribute it and/or modify it
+under the terms of the **GNU Affero General Public License, version 3 or
+later (AGPL-3.0-or-later)**, as published by the Free Software Foundation.
+The full license text is in [`LICENSE`](./LICENSE).
+
+This application incorporates **MuPDF** as its PDF engine, which is licensed
+under the AGPL-3.0. Because of that copyleft, the application as a whole is
+distributed under the AGPL-3.0-or-later, and its **complete corresponding
+source code is available in this repository**.
+
+Third-party open-source components (Electron, React, Tesseract.js, and others)
+and their license notices are listed in
+[`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md).
