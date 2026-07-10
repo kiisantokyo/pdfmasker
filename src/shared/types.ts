@@ -309,5 +309,17 @@ export const IPC = {
   hasUnsavedChanges: 'pdf:hasUnsavedChanges',
   licenseStatus: 'license:status',
   licenseActivate: 'license:activate',
-  licenseDeactivate: 'license:deactivate'
+  licenseDeactivate: 'license:deactivate',
+  appLicenses: 'app:licenses'
 } as const
+
+/** Open-source license info for the About / license screen. */
+export interface AboutInfo {
+  version: string
+  /** Public source-code repository URL (AGPL source availability). */
+  sourceUrl: string
+  /** Full AGPL-3.0 license text (this app's license). */
+  license: string
+  /** THIRD-PARTY-NOTICES.md contents (bundled OSS notices). */
+  notices: string
+}

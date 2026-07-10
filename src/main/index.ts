@@ -201,6 +201,27 @@ function registerIpc(): void {
   // build they are running.
   ipcMain.handle(IPC.appVersion, () => app.getVersion())
 
+  // Open-source license info for the About screen (AGPL source availability +
+  // bundled third-party notices). Files are shipped via extraResources.
+  ipcMain.handle(IPC.appLicenses, async () => {
+    const base = app.isPackaged
+      ? process.resourcesPath
+      : join(import.meta.dirname, '../..')
+    const read = async (name: string): Promise<string> => {
+      try {
+        return await readFile(join(base, name), 'utf8')
+      } catch {
+        return ''
+      }
+    }
+    return {
+      version: app.getVersion(),
+      sourceUrl: 'https://github.com/kiisantokyo/pdfmasker',
+      license: await read('LICENSE'),
+      notices: await read('THIRD-PARTY-NOTICES.md')
+    }
+  })
+
   ipcMain.handle(IPC.open, async () => {
     const result = await dialog.showOpenDialog({
       title: 'ファイルを開く',

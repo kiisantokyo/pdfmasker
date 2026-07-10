@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  AboutInfo,
   ApplyScope,
   BindingSide,
   CleanReport,
@@ -55,6 +56,15 @@ export default function App(): React.JSX.Element {
   const [sidebarW, setSidebarW] = useState(210)
   // App version (package.json), shown in the welcome screen and status bar.
   const [appVersion, setAppVersion] = useState('')
+  // Open-source license / About screen (AGPL source URL + third-party notices).
+  const [about, setAbout] = useState<AboutInfo | null>(null)
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const [licenseTab, setLicenseTab] = useState<'notices' | 'agpl'>('notices')
+
+  const openAbout = (): void => {
+    setAboutOpen(true)
+    if (!about) void pdfApi.appLicenses().then(setAbout)
+  }
 
   useEffect(() => {
     void pdfApi.appVersion().then(setAppVersion)
@@ -1975,11 +1985,67 @@ export default function App(): React.JSX.Element {
                     https://www.cosmo-law.jp
                   </a>
                 </div>
+                <div>
+                  <button className="link-btn" onClick={openAbout}>
+                    オープンソースライセンス
+                  </button>
+                </div>
               </footer>
             </div>
           </main>
         )}
       </div>
+
+      {aboutOpen && (
+        <div className="modal-backdrop" onClick={() => setAboutOpen(false)}>
+          <div className="modal about-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>オープンソースライセンス</h2>
+            <p className="modal-desc">
+              「究極の墨消し」{about?.version ? ` v${about.version}` : ''} は、PDF
+              エンジンに MuPDF（AGPL-3.0）を利用しているため、
+              <b>GNU AGPL-3.0-or-later</b>{' '}
+              のもとで提供される自由ソフトウェアです。ソースコードは公開されています。
+            </p>
+            <div className="about-actions">
+              <button
+                className="modal-cancel"
+                onClick={() => about && window.open(about.sourceUrl, '_blank')}
+              >
+                ソースコード（GitHub）を開く
+              </button>
+              <span className="about-copyright">
+                © 2026 弁護士法人コスモポリタン法律事務所
+              </span>
+            </div>
+            <div className="license-tabs">
+              <button
+                className={'side-btn' + (licenseTab === 'notices' ? ' active' : '')}
+                onClick={() => setLicenseTab('notices')}
+              >
+                サードパーティ表記
+              </button>
+              <button
+                className={'side-btn' + (licenseTab === 'agpl' ? ' active' : '')}
+                onClick={() => setLicenseTab('agpl')}
+              >
+                AGPL-3.0 全文
+              </button>
+            </div>
+            <pre className="license-text">
+              {about
+                ? licenseTab === 'notices'
+                  ? about.notices
+                  : about.license
+                : '読み込み中…'}
+            </pre>
+            <div className="modal-actions">
+              <button className="modal-primary" onClick={() => setAboutOpen(false)}>
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="statusbar">
         <span className="status-msg">{status}</span>

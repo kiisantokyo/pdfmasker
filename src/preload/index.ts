@@ -1,6 +1,7 @@
 import { clipboard, contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from '../shared/types'
 import type {
+  AboutInfo,
   ActivateResult,
   BindingMarginOptions,
   CleanReport,
@@ -41,6 +42,8 @@ export interface RenderResult {
 const api = {
   /** App version string (e.g. "1.0.0") from package.json. */
   appVersion: (): Promise<string> => ipcRenderer.invoke(IPC.appVersion),
+  /** Open-source license info (AGPL source URL + third-party notices). */
+  appLicenses: (): Promise<AboutInfo> => ipcRenderer.invoke(IPC.appLicenses),
   open: (): Promise<OpenResult | null> => ipcRenderer.invoke(IPC.open),
   openFromPath: (path: string): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.openFromPath, path),
