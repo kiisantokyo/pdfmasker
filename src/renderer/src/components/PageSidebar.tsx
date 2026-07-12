@@ -128,6 +128,8 @@ interface Props {
   onBulkDelete: (indices: number[]) => void
   onBulkRotate: (indices: number[], delta: RotateDelta) => void
   onReorder: (indices: number[], to: number) => void
+  onBulkExtract: (indices: number[]) => void
+  onBulkTrim: (indices: number[]) => void
 }
 
 export default function PageSidebar({
@@ -139,7 +141,9 @@ export default function PageSidebar({
   onSelect,
   onBulkDelete,
   onBulkRotate,
-  onReorder
+  onReorder,
+  onBulkExtract,
+  onBulkTrim
 }: Props): React.JSX.Element {
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const anchor = useRef<number | null>(null)
@@ -259,6 +263,18 @@ export default function PageSidebar({
             </button>
             <button title="右に90°回転" onClick={() => onBulkRotate(selectedList(), 90)}>
               ↻
+            </button>
+            <button
+              title="選択ページを別のPDFファイルに書き出します"
+              onClick={() => onBulkExtract(selectedList())}
+            >
+              抽出
+            </button>
+            <button
+              title="選択ページの余白を切り詰めます"
+              onClick={() => onBulkTrim(selectedList())}
+            >
+              余白
             </button>
             <button className="danger" title="選択ページを削除" onClick={() => onBulkDelete(selectedList())}>
               削除

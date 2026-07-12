@@ -168,8 +168,96 @@ body {
 .toolbar button.act-highlight .act-count {
   background: rgba(90, 74, 18, 0.18);
 }
+.toolbar button.act-mosaic {
+  background: #64748b;
+  color: #fff;
+  border-color: #51606f;
+  background-image: repeating-conic-gradient(
+    rgba(255, 255, 255, 0.14) 0deg 90deg,
+    rgba(0, 0, 0, 0.14) 90deg 180deg
+  );
+  background-size: 8px 8px;
+}
+.toolbar button.act-mosaic:hover:not(:disabled) {
+  background-color: #51606f;
+  border-color: #3f4b58;
+}
+.toolbar button.act-mosaic .act-count {
+  background: rgba(0, 0, 0, 0.28);
+}
 .toolbar .spacer {
   flex: 1;
+}
+.toolbar-affiliate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  background: #ff9900; /* Amazon orange */
+  color: #1a1a1a;
+  font-weight: 700;
+  font-size: 12px;
+  text-decoration: none;
+  border: 1px solid #e08800;
+  white-space: nowrap;
+}
+.toolbar-affiliate:hover {
+  background: #ffad33;
+}
+.toolbar-affiliate:active {
+  background: #e88f00;
+}
+
+/* Redaction review panel (未適用の選択一覧) */
+.review-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.review-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 4px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.review-page {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-size: 12px;
+  color: #555;
+  min-width: 34px;
+}
+.review-text {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-reason {
+  flex: 0 0 200px;
+  padding: 3px 6px;
+  border: 1px solid #c7bfe0;
+  border-radius: 5px;
+  font-size: 12px;
+}
+/* Save-time redaction-leftover warning banner */
+.save-residual {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: #fff4e5;
+  border: 1px solid #f0c47a;
+  color: #7a4a00;
+  font-size: 13px;
+}
+.save-residual-terms {
+  margin-top: 4px;
+  font-weight: 700;
+  word-break: break-all;
 }
 .ico-binding {
   vertical-align: -3px;
@@ -1212,6 +1300,31 @@ body {
 /* Redact-by-terms modal */
 .modal-wide {
   width: 460px;
+}
+
+/* 名前を付けて保存: two-column, compact layout so it fits without scrolling. */
+.modal-save {
+  width: 640px;
+}
+.save-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 24px;
+  align-items: start;
+}
+.save-grid .field {
+  margin-bottom: 10px;
+}
+.save-grid .radio-row {
+  padding: 5px 4px;
+}
+.save-grid .radio .hint {
+  margin-top: 2px;
+}
+@media (max-width: 620px) {
+  .save-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .terms-tools {
   display: flex;

@@ -16,7 +16,8 @@ import type {
   SaveProfile,
   SelectMode,
   StampKind,
-  StampPosition
+  StampPosition,
+  TermCount
 } from '@shared/types'
 import { DEFAULT_NAME_OPTIONS, STAMP_LABELS } from '@shared/types'
 import { pdfApi } from './lib/api'
@@ -103,6 +104,27 @@ export default function App(): React.JSX.Element {
   const [sizeProfile, setSizeProfile] = useState<SaveProfile>('original')
   // 保存ファイル名の項目（YYMMDD前置き・（墨消し）・（編集済み））
   const [nameOpts, setNameOpts] = useState<SaveNameOptions>(DEFAULT_NAME_OPTIONS)
+  // 「名前を付けて保存」統合ダイアログ：内容の形式・パスワード保護・暗号化パスワード。
+  // 形式（通常PDF/画像化PDF/PNG）と「パスワード保護」は独立。パスワード付きの画像化PDF
+  // なども選べる。
+  const [saveContent, setSaveContent] = useState<'normal' | 'flatten' | 'png'>(
+    'normal'
+  )
+  const [saveEncrypt, setSaveEncrypt] = useState(false)
+  const [encPw, setEncPw] = useState('')
+  const [encPw2, setEncPw2] = useState('')
+  const [encShow, setEncShow] = useState(false)
+  // 保存時に表示する墨消し漏れの語（null=なし）。保存ダイアログ/上書き確認に出す。
+  const [saveResidual, setSaveResidual] = useState<TermCount[] | null>(null)
+  // 余白トリミングモーダル（対象ページ＋余白mm）
+  const [trimOpen, setTrimOpen] = useState(false)
+  const [trimTargets, setTrimTargets] = useState<number[]>([])
+  const [trimMm, setTrimMm] = useState(10)
+  // 墨消し漏れチェックの結果（null=非表示）
+  const [residual, setResidual] = useState<TermCount[] | null>(null)
+  // 墨消しレビュー・パネルの開閉と、各選択への理由メモ（rect署名→理由）
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [reasons, setReasons] = useState<Record<string, string>>({})
   // 範囲を選んでクリップボードにコピー（ワンショット）。true の間だけ十字ドラッグ。
   const [copyRegion, setCopyRegion] = useState(false)
   // 隠し文字（透明テキスト）モーダル
@@ -191,6 +213,25 @@ export default function App(): React.JSX.Element {
   const redoStack = useRef<Hist[]>([])
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
+  // Every text string the user selected/added this session (word-click / search /
+  // AI / drag), redacted or not. Drives the manual 墨消し漏れチェック.
+  const sessionTerms = useRef<Set<string>>(new Set())
+  // Precise map: pending-rect signature → the text it was created from. Lets the
+  // auto-check after 墨消し verify only the strings actually redacted (no false
+  // alarms from text that was merely highlighted).
+  const markText = useRef<Map<string, string>>(new Map())
+
+  /** Stable signature for a pending rect (matches the dedupe key). */
+  const rectKey = (r: RedactionRect): string =>
+    `${r.pageIndex}:${Math.round(r.x0)}:${Math.round(r.y0)}:${Math.round(r.x1)}:${Math.round(r.y1)}`
+
+  /** Record the source text of freshly-added marks (for residual checking). */
+  const recordMarkText = (rects: RedactionRect[], text: string): void => {
+    const t = text.trim()
+    if (!t) return
+    sessionTerms.current.add(t)
+    for (const r of rects) markText.current.set(rectKey(r), t)
+  }
 
   const syncHist = useCallback(() => {
     setCanUndo(undoStack.current.length > 0)
@@ -238,6 +279,12 @@ export default function App(): React.JSX.Element {
       setDirty(false)
       setRefreshKey((k) => k + 1)
       resetHist()
+      // New document → drop the previous session's redaction tracking & reasons.
+      sessionTerms.current.clear()
+      markText.current.clear()
+      setReasons({})
+      setResidual(null)
+      setSaveResidual(null)
       setStatus(`「${info.name}」を開きました（${info.pageCount} ページ）。`)
       // Alert the user if the file carries hidden text (white / invisible).
       void pdfApi
@@ -387,6 +434,8 @@ export default function App(): React.JSX.Element {
           ? `${removed} 箇所を白塗りしました（下の文字・画像を削除）。`
           : `${removed} 箇所を墨消ししました（下の文字・画像を削除）。`
       )
+      // Residual check is no longer run here (too noisy); it runs when saving
+      // (a banner in the save dialog) and via the manual 墨消し漏れチェック button.
     }, fill === 'white' ? '白塗りの適用' : '墨消しの適用')
 
   const applyHighlight = (): Promise<void> =>
@@ -402,6 +451,19 @@ export default function App(): React.JSX.Element {
       setStatus(`${n} 箇所に黄色マーカーを引きました。`)
     }, '黄色マーカー')
 
+  const applyMosaic = (): Promise<void> =>
+    run(async () => {
+      if (pending.length === 0) return
+      const info = await pdfApi.mosaic(pending)
+      pushHist(true, pending, [])
+      setDoc(info)
+      const n = pending.length
+      setPending([])
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setStatus(`${n} 箇所をモザイクにしました（下の文字・画像を削除）。`)
+    }, 'モザイクの適用')
+
   const searchAdd = (keyword: string): Promise<void> =>
     run(async () => {
       const term = keyword.trim()
@@ -412,6 +474,7 @@ export default function App(): React.JSX.Element {
         return
       }
       commitMarks([...pending, ...rects])
+      recordMarkText(rects, term)
       setLastSelText(term)
       setStatus(
         `「${term}」を ${rects.length} 箇所、選択に追加しました。上部の「墨」または「黄」で処理します。`
@@ -424,6 +487,7 @@ export default function App(): React.JSX.Element {
       if (!term) return
       const rects = await pdfApi.findWord(term)
       commitMarks([...pending, ...rects])
+      recordMarkText(rects, term)
       setStatus(`「${term}」を ${rects.length} 箇所、選択に追加しました。`)
     }, '同語の追加')
 
@@ -649,6 +713,11 @@ export default function App(): React.JSX.Element {
       setRefreshKey((k) => k + 1)
       setLastSelText('')
       setHiddenWarning(null)
+      sessionTerms.current.clear()
+      markText.current.clear()
+      setReasons({})
+      setResidual(null)
+      setSaveResidual(null)
       setStatus('PDF・Word・画像ファイルを開いて始めましょう。')
     }, '閉じる')
 
@@ -661,8 +730,11 @@ export default function App(): React.JSX.Element {
   // (doc.path is set). With no path yet, save() routes to 名前を付けて保存,
   // whose OS dialog handles its own overwrite prompt.
   const requestSave = (): void => {
-    if (doc?.path) setOverwriteConfirm(true)
-    else void save()
+    if (doc?.path) {
+      setSaveResidual(null)
+      void prepSaveResidual()
+      setOverwriteConfirm(true)
+    } else void save()
   }
 
   // Export the current page as a PNG image (separate artifact; doc unchanged).
@@ -674,6 +746,7 @@ export default function App(): React.JSX.Element {
         return
       }
       if (res.saved) {
+        setSizeOpen(false)
         setStatus(`ページ ${currentPage + 1} をPNG画像で保存しました：${res.path}`)
       }
     }, 'PNG画像で保存')
@@ -699,36 +772,154 @@ export default function App(): React.JSX.Element {
       setStatus('選択した範囲を画像としてクリップボードにコピーしました。')
     }, '範囲をコピー')
 
-  // Save with an image-size profile (opens a picker; shows resulting size).
-  const saveSized = (): Promise<void> =>
+  // Save as a normal PDF with a size profile; `password` → AES-256 encrypted.
+  const saveSized = (password?: string): Promise<void> =>
     run(async () => {
-      const res = await pdfApi.saveAsSized(sizeProfile, nameOpts)
+      const res = await pdfApi.saveAsSized(sizeProfile, nameOpts, password)
       if (res.gated) {
         onSaveGated()
         return
       }
       if (res.saved) {
-        setDirty(false)
-        if (doc) setDoc({ ...doc, path: res.path ?? doc.path })
         setSizeOpen(false)
         const mb = res.size ? (res.size / (1024 * 1024)).toFixed(2) : '?'
-        setStatus(`${res.path} に保存しました（${mb} MB）。`)
+        if (password) {
+          // Encrypted output is a separate artifact — the working doc is unchanged.
+          setEncPw('')
+          setEncPw2('')
+          setStatus(`パスワード付きPDF（AES-256）で保存しました（${mb} MB）：${res.path}`)
+        } else {
+          setDirty(false)
+          if (doc) setDoc({ ...doc, path: res.path ?? doc.path })
+          setStatus(`${res.path} に保存しました（${mb} MB）。`)
+        }
       }
     }, '名前を付けて保存')
 
-  // Export an image-only PDF (structurally removes all hidden data). Separate
-  // artifact — does not change the editable document.
-  const saveFlattened = (): Promise<void> =>
+  // Unified 名前を付けて保存 dispatcher — routes to the chosen content format and
+  // applies password protection when requested (combinable with 画像化PDF).
+  const doSaveAs = (): Promise<void> => {
+    if (saveContent === 'png') return saveImage() // PNG は暗号化不可
+    let password: string | undefined
+    if (saveEncrypt) {
+      if (!encPw) {
+        setStatus('パスワードを入力してください。')
+        return Promise.resolve()
+      }
+      if (encPw.includes(',')) {
+        setStatus('パスワードにカンマ「,」は使えません。別の文字にしてください。')
+        return Promise.resolve()
+      }
+      if (encPw !== encPw2) {
+        setStatus('確認用パスワードが一致しません。')
+        return Promise.resolve()
+      }
+      password = encPw
+    }
+    return saveContent === 'flatten'
+      ? saveFlattened(password)
+      : saveSized(password)
+  }
+
+  // Compact one-line preview of residual terms: up to `max` words, then 「など」.
+  const residualPreview = (list: TermCount[], max: number): string => {
+    const shown = list
+      .slice(0, max)
+      .map((t) => `「${t.term}」`)
+      .join('、')
+    return list.length > max ? `${shown} など` : shown
+  }
+
+  // Compute the residual-terms warning shown at save time (fire-and-forget).
+  const prepSaveResidual = async (): Promise<void> => {
+    const terms = [...sessionTerms.current]
+    if (terms.length === 0) {
+      setSaveResidual(null)
+      return
+    }
+    const hits = await pdfApi.countTerms(terms)
+    setSaveResidual(hits.length ? hits : null)
+  }
+
+  // Open the 名前を付けて保存 dialog, checking for redaction leftovers first.
+  const openSaveAs = (): void => {
+    setSaveResidual(null)
+    void prepSaveResidual()
+    setSizeOpen(true)
+  }
+
+  // Write the given pages to a separate PDF file.
+  const extractSelected = (indices: number[]): Promise<void> =>
     run(async () => {
-      if (!doc) return
-      const res = await pdfApi.saveAsFlattened()
+      if (indices.length === 0) return
+      const res = await pdfApi.extractPages(indices, nameOpts)
       if (res.gated) {
         onSaveGated()
         return
       }
       if (res.saved) {
+        setStatus(`${indices.length} ページを別ファイルに書き出しました：${res.path}`)
+      }
+    }, 'ページを別ファイルに書き出し')
+
+  // Open the trim dialog for the given pages (falls back to the current page).
+  const openTrim = (indices: number[]): void => {
+    setTrimTargets(indices.length > 0 ? indices : [currentPage])
+    setTrimOpen(true)
+  }
+
+  const applyTrim = (): Promise<void> =>
+    run(async () => {
+      if (trimTargets.length === 0) return
+      const info = await pdfApi.trimPages(trimTargets, trimMm)
+      // Trimmed pages' coordinate space shifts, so drop any pending marks on them.
+      const trimmed = new Set(trimTargets)
+      const nextPending = pending.filter((r) => !trimmed.has(r.pageIndex))
+      pushHist(true, pending, nextPending)
+      setDoc(info)
+      setPending(nextPending)
+      setDirty(true)
+      setTrimOpen(false)
+      setRefreshKey((k) => k + 1)
+      setStatus(`${trimTargets.length} ページの余白を各辺 ${trimMm}mm トリミングしました。`)
+    }, '余白のトリミング')
+
+  // 墨消し漏れチェック: confirm the session's redacted terms are no longer present.
+  const checkResidual = (): Promise<void> =>
+    run(async () => {
+      const terms = [...sessionTerms.current]
+      if (terms.length === 0) {
+        setStatus('チェックできる語がありません（単語クリック・検索・AIで語を選ぶと記録されます）。')
+        return
+      }
+      const hits = await pdfApi.countTerms(terms)
+      if (hits.length === 0) {
+        setStatus(`✅ 記録した ${terms.length} 語は文書内に残っていません（墨消し漏れなし）。`)
+      } else {
+        setResidual(hits)
+      }
+    }, '墨消し漏れチェック')
+
+  // Export an image-only PDF (structurally removes all hidden data). Separate
+  // artifact — does not change the editable document. `password` → AES-256.
+  const saveFlattened = (password?: string): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      const res = await pdfApi.saveAsFlattened(nameOpts, password)
+      if (res.gated) {
+        onSaveGated()
+        return
+      }
+      if (res.saved) {
+        setSizeOpen(false)
+        if (password) {
+          setEncPw('')
+          setEncPw2('')
+        }
         const mb = res.size ? (res.size / (1024 * 1024)).toFixed(2) : '?'
-        setStatus(`画像化PDFで保存しました（${mb} MB・隠し情報なし）：${res.path}`)
+        setStatus(
+          `画像化PDF${password ? '（パスワード付き）' : ''}で保存しました（${mb} MB・隠し情報なし）：${res.path}`
+        )
       }
     }, '画像化PDFで保存')
 
@@ -786,6 +977,7 @@ export default function App(): React.JSX.Element {
         return
       }
       commitMarks([...pending, hit.rect])
+      recordMarkText([hit.rect], hit.word)
       setLastSelText(hit.word)
       setStatus('選択に追加しました。上部の「墨」または「黄」で処理します。')
     }, '単語の選択')
@@ -830,6 +1022,7 @@ export default function App(): React.JSX.Element {
         return
       }
       commitMarks([...pending, ...res.rects])
+      recordMarkText(res.rects, res.text)
       setLastSelText(res.text)
       setStatus(
         `${res.rects.length} 箇所を選択に追加しました。上部の「墨」または「黄」で処理します。`
@@ -1097,6 +1290,14 @@ export default function App(): React.JSX.Element {
             <p className="modal-desc">
               「{doc?.path?.replace(/^.*[\\/]/, '')}」を上書きします。よろしいですか？
             </p>
+            {saveResidual && saveResidual.length > 0 && (
+              <div className="warn save-residual">
+                ⚠ <b>墨消し漏れの可能性</b>：次の語がまだ文書内に残っています。
+                <div className="save-residual-terms">
+                  {residualPreview(saveResidual, 5)}
+                </div>
+              </div>
+            )}
             <div className="modal-actions">
               <button
                 className="modal-cancel"
@@ -1202,11 +1403,165 @@ export default function App(): React.JSX.Element {
       {termsOpen && (
         <RedactByTermsModal
           onClose={() => setTermsOpen(false)}
-          onAddRects={(rects, summary) => {
+          onAddRects={(rects, summary, terms) => {
             commitMarks([...pending, ...rects])
+            for (const t of terms ?? []) sessionTerms.current.add(t.trim())
             setStatus(summary)
           }}
         />
+      )}
+
+      {/* パスワードを付けて保存（AES-256 暗号化） */}
+      {/* 余白のトリミング */}
+      {trimOpen && (
+        <div className="modal-backdrop" onClick={() => setTrimOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>余白のトリミング</h2>
+            <p className="modal-desc">
+              選択した <b>{trimTargets.length} ページ</b>の余白を、上下左右それぞれ
+              指定した幅だけ切り詰めます（表示範囲を狭めます）。
+            </p>
+            <div className="field">
+              <span className="field-label">各辺の切り詰め幅（mm）</span>
+              <input
+                className="text-input"
+                type="number"
+                min={1}
+                max={100}
+                value={trimMm}
+                onChange={(e) => setTrimMm(Number(e.target.value))}
+              />
+            </div>
+            <p className="hint">
+              ※ 範囲外の内容は隠れますが、ファイル内には残ります。完全に取り除くには
+              「画像化PDFで保存」をご利用ください。
+            </p>
+            <div className="modal-actions">
+              <button className="modal-cancel" onClick={() => setTrimOpen(false)}>
+                キャンセル
+              </button>
+              <button
+                className="modal-primary"
+                onClick={applyTrim}
+                disabled={busy || trimMm <= 0}
+              >
+                トリミング
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 墨消し漏れチェックの結果 */}
+      {residual && (
+        <div className="modal-backdrop" onClick={() => setResidual(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>⚠ 墨消し漏れの可能性</h2>
+            <p className="modal-desc">
+              この作業中に選んだ語のうち、次の語が<b>まだ文書内に残っています</b>。
+              墨消しし忘れがないかご確認ください（黄色マーカーだけを引いた語もここに出ます）。
+            </p>
+            <ul className="terms-list">
+              {residual.slice(0, 20).map((t) => (
+                <li key={t.term}>
+                  <span className="term-text">{t.term}</span>
+                  <span className="term-count">{t.count}件 残存</span>
+                  <button
+                    className="link-btn"
+                    onClick={() => {
+                      setResidual(null)
+                      void searchAdd(t.term)
+                    }}
+                    title="この語を検索して選択に追加します"
+                  >
+                    選択に追加
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {residual.length > 20 && (
+              <p className="hint">
+                ほか {residual.length - 20} 語あります（上位20語を表示）。
+              </p>
+            )}
+            <div className="modal-actions">
+              <button className="modal-primary" onClick={() => setResidual(null)}>
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 墨消しレビュー・パネル（未適用の選択一覧） */}
+      {reviewOpen && (
+        <div className="modal-backdrop" onClick={() => setReviewOpen(false)}>
+          <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+            <h2>選択（未適用）の一覧</h2>
+            <p className="modal-desc">
+              現在マークしている <b>{pending.length} 箇所</b>の一覧です。個別に削除したり、
+              後で見返すための理由メモを付けられます。処理は上部ツールバーの
+              「墨」「白」「黄」「モザイク」で行います。
+            </p>
+            {pending.length === 0 ? (
+              <p className="hint">選択はありません。</p>
+            ) : (
+              <ul className="review-list">
+                {pending.map((r) => {
+                  const key = rectKey(r)
+                  const text = markText.current.get(key)
+                  return (
+                    <li key={key} className="review-item">
+                      <span className="review-page">P.{r.pageIndex + 1}</span>
+                      <span className="review-text">
+                        {text || '（範囲選択）'}
+                      </span>
+                      <input
+                        className="review-reason"
+                        list="reason-presets"
+                        placeholder="理由メモ（任意）"
+                        value={reasons[key] ?? ''}
+                        onChange={(e) =>
+                          setReasons((prev) => ({ ...prev, [key]: e.target.value }))
+                        }
+                      />
+                      <button
+                        className="link-btn"
+                        title="この選択を削除"
+                        onClick={() => commitMarks(pending.filter((x) => x !== r))}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            <datalist id="reason-presets">
+              <option value="個人名" />
+              <option value="住所" />
+              <option value="電話番号" />
+              <option value="メールアドレス" />
+              <option value="会社・組織名" />
+              <option value="金額" />
+              <option value="日付・生年月日" />
+              <option value="マイナンバー・口座・カード番号" />
+              <option value="その他個人情報" />
+              <option value="機密情報" />
+            </datalist>
+            <div className="modal-actions">
+              <button
+                onClick={() => commitMarks([])}
+                disabled={pending.length === 0}
+              >
+                すべてクリア
+              </button>
+              <button className="modal-primary" onClick={() => setReviewOpen(false)}>
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {hiddenReport && (
@@ -1385,86 +1740,185 @@ export default function App(): React.JSX.Element {
 
       {sizeOpen && (
         <div className="modal-backdrop" onClick={() => setSizeOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal-save" onClick={(e) => e.stopPropagation()}>
             <h2>名前を付けて保存</h2>
             <p className="modal-desc">
-              ファイル名の項目と、画像を含む場合のファイルサイズを選んで保存します
-              （元の書類は変更しません）。
+              保存形式とファイル名の項目を選んで保存します（元の書類は変更しません）。
             </p>
-            <div className="field">
-              <span className="field-label">ファイル名に付ける項目</span>
-              <label className="radio radio-row">
-                <input
-                  type="checkbox"
-                  checked={nameOpts.datePrefix}
-                  onChange={(e) =>
-                    setNameOpts((o) => ({ ...o, datePrefix: e.target.checked }))
-                  }
-                />
-                <span>
-                  <b>冒頭に日付（YYMMDD）</b>
-                  <span className="hint">例: 250710_〜</span>
-                </span>
-              </label>
-              <label className="radio radio-row">
-                <input
-                  type="checkbox"
-                  checked={nameOpts.redactLabel}
-                  onChange={(e) =>
-                    setNameOpts((o) => ({ ...o, redactLabel: e.target.checked }))
-                  }
-                />
-                <span>
-                  <b>「（墨消し）」を付ける</b>
-                </span>
-              </label>
-              <label className="radio radio-row">
-                <input
-                  type="checkbox"
-                  checked={nameOpts.editLabel}
-                  onChange={(e) =>
-                    setNameOpts((o) => ({ ...o, editLabel: e.target.checked }))
-                  }
-                />
-                <span>
-                  <b>「（編集済み）」を付ける</b>
-                </span>
-              </label>
-            </div>
-            <div className="field">
-              <span className="field-label">ファイルサイズ（画像を含む場合）</span>
-              {(
-                [
-                  {
-                    key: 'original',
-                    label: '原本品質（推奨・画像そのまま）',
-                    desc: '画像を一切変更しません。墨消し原本はこれが安全。'
-                  },
-                  {
-                    key: 'standard',
-                    label: '標準（軽量化）',
-                    desc: '画像を約200dpi・高画質JPEGに。印刷・共有向け。'
-                  },
-                  {
-                    key: 'light',
-                    label: '軽量（メール向け）',
-                    desc: '画像を約150dpiに。読めれば十分・最小サイズ。'
-                  }
-                ] as { key: SaveProfile; label: string; desc: string }[]
-              ).map((o) => (
-                <label className="radio radio-row" key={o.key}>
+
+            {saveResidual && saveResidual.length > 0 && (
+              <div className="warn save-residual">
+                ⚠ <b>墨消し漏れの可能性</b>：次の語がまだ文書内に残っています。保存前にご確認ください。
+                <div className="save-residual-terms">
+                  {residualPreview(saveResidual, 5)}
+                </div>
+              </div>
+            )}
+
+            <div className="save-grid">
+              <div className="field">
+                <span className="field-label">保存する内容</span>
+                {(
+                  [
+                    {
+                      key: 'normal',
+                      label: '通常のPDF',
+                      desc: 'そのままのPDFで保存（既定）。'
+                    },
+                    {
+                      key: 'flatten',
+                      label: '画像化PDF',
+                      desc: '全ページ画像化し隠し情報を完全除去。'
+                    },
+                    {
+                      key: 'png',
+                      label: 'PNG画像（このページ）',
+                      desc: `現在のページ（${currentPage + 1}）を画像に。`
+                    }
+                  ] as {
+                    key: 'normal' | 'flatten' | 'png'
+                    label: string
+                    desc: string
+                  }[]
+                ).map((o) => (
+                  <label className="radio radio-row" key={o.key}>
+                    <input
+                      type="radio"
+                      name="saveContent"
+                      checked={saveContent === o.key}
+                      onChange={() => setSaveContent(o.key)}
+                    />
+                    <span>
+                      <b>{o.label}</b>
+                      <span className="hint">{o.desc}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="field">
+                <span className="field-label">ファイル名に付ける項目</span>
+                <label className="radio radio-row">
                   <input
-                    type="radio"
-                    name="sizeProfile"
-                    checked={sizeProfile === o.key}
-                    onChange={() => setSizeProfile(o.key)}
+                    type="checkbox"
+                    checked={nameOpts.datePrefix}
+                    onChange={(e) =>
+                      setNameOpts((o) => ({ ...o, datePrefix: e.target.checked }))
+                    }
                   />
                   <span>
-                    <b>{o.label}</b>
-                    <span className="hint">{o.desc}</span>
+                    <b>冒頭に日付（YYMMDD）</b>
+                    <span className="hint">例: 250710_〜</span>
                   </span>
                 </label>
-              ))}
+                <label className="radio radio-row">
+                  <input
+                    type="checkbox"
+                    checked={nameOpts.redactLabel}
+                    onChange={(e) =>
+                      setNameOpts((o) => ({ ...o, redactLabel: e.target.checked }))
+                    }
+                  />
+                  <span>
+                    <b>「（墨消し）」を付ける</b>
+                  </span>
+                </label>
+                <label className="radio radio-row">
+                  <input
+                    type="checkbox"
+                    checked={nameOpts.editLabel}
+                    onChange={(e) =>
+                      setNameOpts((o) => ({ ...o, editLabel: e.target.checked }))
+                    }
+                  />
+                  <span>
+                    <b>「（編集済み）」を付ける</b>
+                  </span>
+                </label>
+              </div>
+
+              {saveContent !== 'png' && (
+                <div className="field">
+                  <label className="radio radio-row">
+                    <input
+                      type="checkbox"
+                      checked={saveEncrypt}
+                      onChange={(e) => setSaveEncrypt(e.target.checked)}
+                    />
+                    <span>
+                      <b>🔒 パスワードで保護</b>
+                      <span className="hint">開くのにパスワードが必要（AES-256）。</span>
+                    </span>
+                  </label>
+                  {saveEncrypt && (
+                    <>
+                      <input
+                        className="text-input"
+                        type={encShow ? 'text' : 'password'}
+                        value={encPw}
+                        onChange={(e) => setEncPw(e.target.value)}
+                        placeholder="開くために必要なパスワード"
+                      />
+                      <input
+                        className="text-input"
+                        type={encShow ? 'text' : 'password'}
+                        value={encPw2}
+                        onChange={(e) => setEncPw2(e.target.value)}
+                        placeholder="もう一度入力（確認）"
+                      />
+                      <label className="radio">
+                        <input
+                          type="checkbox"
+                          checked={encShow}
+                          onChange={(e) => setEncShow(e.target.checked)}
+                        />
+                        パスワードを表示
+                      </label>
+                      <span className="hint">
+                        ※ 端末に保存されません。忘れると開けません。カンマ「,」不可。
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {saveContent === 'normal' && (
+                <div className="field">
+                  <span className="field-label">ファイルサイズ（画像を含む場合）</span>
+                  {(
+                    [
+                      {
+                        key: 'original',
+                        label: '原本品質（推奨）',
+                        desc: '画像そのまま。墨消し原本はこれが安全。'
+                      },
+                      {
+                        key: 'standard',
+                        label: '標準（軽量化）',
+                        desc: '約200dpi・高画質JPEG。印刷・共有向け。'
+                      },
+                      {
+                        key: 'light',
+                        label: '軽量（メール向け）',
+                        desc: '約150dpi。読めれば十分・最小。'
+                      }
+                    ] as { key: SaveProfile; label: string; desc: string }[]
+                  ).map((o) => (
+                    <label className="radio radio-row" key={o.key}>
+                      <input
+                        type="radio"
+                        name="sizeProfile"
+                        checked={sizeProfile === o.key}
+                        onChange={() => setSizeProfile(o.key)}
+                      />
+                      <span>
+                        <b>{o.label}</b>
+                        <span className="hint">{o.desc}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="modal-actions">
               <button className="modal-cancel" onClick={() => setSizeOpen(false)}>
@@ -1472,8 +1926,8 @@ export default function App(): React.JSX.Element {
               </button>
               <button
                 className="modal-primary"
-                onClick={saveSized}
-                disabled={busy}
+                onClick={doSaveAs}
+                disabled={busy || (saveEncrypt && !encPw)}
               >
                 この内容で保存…
               </button>
@@ -1929,6 +2383,7 @@ export default function App(): React.JSX.Element {
         onRedact={() => applyRedactions('black')}
         onWhiteFill={() => applyRedactions('white')}
         onHighlight={applyHighlight}
+        onMosaic={applyMosaic}
         onExpandSameWord={expandSameWord}
         canExpand={lastSelText.trim().length > 0}
         onSearchAdd={searchAdd}
@@ -1951,12 +2406,12 @@ export default function App(): React.JSX.Element {
         onMoveDown={() => move(1)}
         onZoom={setZoom}
         onSave={requestSave}
-        onSaveSized={() => setSizeOpen(true)}
-        onSaveImage={saveImage}
+        onSaveSized={openSaveAs}
         onCopyImage={copyImage}
-        onSaveFlattened={saveFlattened}
         onCleanForSubmission={() => setCleanConfirm(true)}
         onCompareText={() => setCompareConfirm(true)}
+        onCheckResidual={checkResidual}
+        onReview={() => setReviewOpen(true)}
         onCopyRegion={() => setCopyRegion(true)}
       />
 
@@ -2012,6 +2467,8 @@ export default function App(): React.JSX.Element {
               onBulkDelete={bulkDelete}
               onBulkRotate={bulkRotate}
               onReorder={reorder}
+              onBulkExtract={extractSelected}
+              onBulkTrim={openTrim}
             />
             <div
               className="resizer"

@@ -318,6 +318,10 @@ function registerIpc(): void {
     }
   )
 
+  ipcMain.handle(IPC.mosaic, (_e, rects: RedactionRect[]) =>
+    pdf.applyMosaic(rects)
+  )
+
   ipcMain.handle(
     IPC.wordAt,
     (_e, pageIndex: number, x: number, y: number) => pdf.wordAt(pageIndex, x, y)
@@ -435,7 +439,12 @@ function registerIpc(): void {
 
   ipcMain.handle(
     IPC.saveAsSized,
-    async (_e, profile: SaveProfile, nameOpts?: SaveNameOptions) => {
+    async (
+      _e,
+      profile: SaveProfile,
+      nameOpts?: SaveNameOptions,
+      password?: string
+    ) => {
       if (!license.getState().canSave) return { saved: false, gated: true }
       const result = await dialog.showSaveDialog({
         title: 'Save PDF As',
@@ -443,9 +452,11 @@ function registerIpc(): void {
         filters: [{ name: 'PDF', extensions: ['pdf'] }]
       })
       if (result.canceled || !result.filePath) return { saved: false }
-      const bytes = pdf.saveToBufferProfiled(profile)
+      const bytes = pdf.saveToBufferProfiled(profile, password || undefined)
       await writeFile(result.filePath, bytes)
-      pdf.markSavedAt(result.filePath)
+      // An encrypted export is not made the working path (a later 上書き保存 must
+      // not silently overwrite the protected file with an unencrypted one).
+      if (!password) pdf.markSavedAt(result.filePath)
       return { saved: true, path: result.filePath, size: bytes.length }
     }
   )
@@ -500,15 +511,37 @@ function registerIpc(): void {
     return { info, ocr: 'auto' as const }
   })
 
-  ipcMain.handle(IPC.saveAsFlattened, async () => {
+  ipcMain.handle(
+    IPC.extractPages,
+    async (_e, indices: number[], nameOpts?: SaveNameOptions) => {
+      if (!license.getState().canSave) return { saved: false, gated: true }
+      const result = await dialog.showSaveDialog({
+        title: '選択ページを別ファイルに書き出し',
+        defaultPath: suggestedSavePath(nameOpts),
+        filters: [{ name: 'PDF', extensions: ['pdf'] }]
+      })
+      if (result.canceled || !result.filePath) return { saved: false }
+      const bytes = pdf.extractPagesToBuffer(indices)
+      await writeFile(result.filePath, bytes)
+      return { saved: true, path: result.filePath, size: bytes.length }
+    }
+  )
+
+  ipcMain.handle(IPC.trimPages, (_e, indices: number[], marginMm: number) =>
+    pdf.trimPages(indices, marginMm)
+  )
+
+  ipcMain.handle(
+    IPC.saveAsFlattened,
+    async (_e, nameOpts?: SaveNameOptions, password?: string) => {
     if (!license.getState().canSave) return { saved: false, gated: true }
     const result = await dialog.showSaveDialog({
       title: 'Save PDF As',
-      defaultPath: suggestedSavePath(),
+      defaultPath: suggestedSavePath(nameOpts),
       filters: [{ name: 'PDF', extensions: ['pdf'] }]
     })
     if (result.canceled || !result.filePath) return { saved: false }
-    const bytes = pdf.flattenToImages()
+    const bytes = pdf.flattenToImages(password || undefined)
     await writeFile(result.filePath, bytes)
     // The flattened image-only file is a separate export, not "the document" —
     // don't mark it as the current path (avoids a later 上書き保存 overwriting the

@@ -620,6 +620,147 @@ export function highlightRects(rects: RedactionRect[]): DocumentInfo {
   return getInfo()
 }
 
+// ─── Mosaic (pixelate) redaction ──────────────────────────────────────────────
+// Like applyRedactions, the underlying text/image data under each rect is truly
+// removed. But instead of a flat black/white box, a pixelated (mosaic) rendering
+// of the ORIGINAL region — captured before removal and downsampled to a coarse
+// grid — is painted back on top. The mosaic is only a low-resolution average, so
+// no original detail survives; the destructive removal is what makes it
+// unrecoverable (the product's whole point). Uses the same image-XObject
+// placement as addStamp and the /Rotate-aware pageVisualMatrix.
+const MOSAIC_DPI = 150
+/** Target size (PDF points) of one mosaic block; smaller = finer mosaic. */
+const MOSAIC_CELL_PT = 4
+
+export function applyMosaic(rects: RedactionRect[]): DocumentInfo {
+  const d = requireDoc()
+  if (rects.length === 0) return getInfo()
+  const byPage = new Map<number, RedactionRect[]>()
+  for (const r of rects) {
+    const list = byPage.get(r.pageIndex) ?? []
+    list.push(r)
+    byPage.set(r.pageIndex, list)
+  }
+  const enc = new TextEncoder()
+  const zoom = MOSAIC_DPI / 72
+
+  operation('モザイクの適用', () => {
+    for (const [pageIndex, pageRects] of byPage) {
+      const page = d.loadPage(pageIndex)
+      const pageObj = page.getObject()
+      const [llx, lly, urx, ury] = mediaBox(page)
+      const w = urx - llx
+      const h = ury - lly
+      if (w <= 0 || h <= 0) continue
+      const { cm, visW, visH } = pageVisualMatrix(readRotation(page), llx, lly, w, h)
+
+      // 1) Capture a pixelated image of each region from the ORIGINAL content,
+      //    before any removal. The page pixmap is upright (toPixmap bakes /Rotate),
+      //    so region rects (visual, top-left origin) map straight to device px.
+      const pix = page.toPixmap(
+        mupdf.Matrix.scale(zoom, zoom),
+        mupdf.ColorSpace.DeviceRGB,
+        false,
+        true
+      )
+      const pw = pix.getWidth()
+      const ph = pix.getHeight()
+      const placements: {
+        imgRef: mupdf.PDFObject
+        name: string
+        sW: number
+        sH: number
+        vx: number
+        vy: number
+      }[] = []
+      try {
+        pageRects.forEach((r, k) => {
+          // Region in visual (upright, top-left origin) points, clamped to page.
+          const bx0 = Math.max(0, Math.min(r.x0, r.x1))
+          const by0 = Math.max(0, Math.min(r.y0, r.y1))
+          const bx1 = Math.min(visW, Math.max(r.x0, r.x1))
+          const by1 = Math.min(visH, Math.max(r.y0, r.y1))
+          const wPt = bx1 - bx0
+          const hPt = by1 - by0
+          if (wPt < 1 || hPt < 1) return
+          // Region in device pixels of the upright pixmap.
+          const dx0 = Math.max(0, Math.min(bx0 * zoom, pw))
+          const dy0 = Math.max(0, Math.min(by0 * zoom, ph))
+          const dx1 = Math.max(0, Math.min(bx1 * zoom, pw))
+          const dy1 = Math.max(0, Math.min(by1 * zoom, ph))
+          if (dx1 - dx0 < 1 || dy1 - dy0 < 1) return
+          // Downsample the region to a coarse grid → mosaic blocks. The PDF
+          // renderer upsamples this tiny image with nearest-neighbour (images are
+          // not interpolated by default), giving crisp mosaic squares.
+          const gridW = Math.max(2, Math.min(64, Math.round(wPt / MOSAIC_CELL_PT)))
+          const gridH = Math.max(2, Math.min(64, Math.round(hPt / MOSAIC_CELL_PT)))
+          const small = pix.warp(
+            [
+              [dx0, dy0],
+              [dx1, dy0],
+              [dx1, dy1],
+              [dx0, dy1]
+            ],
+            gridW,
+            gridH
+          )
+          let imgRef: mupdf.PDFObject
+          try {
+            imgRef = d.addImage(new mupdf.Image(Uint8Array.from(small.asPNG())))
+          } finally {
+            small.destroy?.()
+          }
+          placements.push({
+            imgRef,
+            name: `PMMOSAIC${k}`,
+            sW: wPt,
+            sH: hPt,
+            vx: bx0,
+            vy: visH - by1 // flip top-left origin → content-stream bottom-left
+          })
+        })
+      } finally {
+        pix.destroy?.()
+      }
+      if (placements.length === 0) continue
+
+      // 2) TRUE redaction: remove the underlying text/image data. The fill colour
+      //    is irrelevant — the opaque mosaic is painted over it — so keep black.
+      for (const r of pageRects) {
+        const annot = page.createAnnotation('Redact')
+        annot.setRect([
+          Math.min(r.x0, r.x1),
+          Math.min(r.y0, r.y1),
+          Math.max(r.x0, r.x1),
+          Math.max(r.y0, r.y1)
+        ])
+        annot.update()
+      }
+      page.applyRedactions(true, mupdf.PDFPage.REDACT_IMAGE_PIXELS)
+
+      // 3) Paint the mosaic images over the (now-removed) regions.
+      const res = ownResources(d, pageObj)
+      const xobj = ownSubDict(d, res, 'XObject')
+      let ops = 'q\n' + cm.map(fmt).join(' ') + ' cm\n'
+      for (const p of placements) {
+        xobj.put(p.name, p.imgRef)
+        ops +=
+          `q ${fmt(p.sW)} 0 0 ${fmt(p.sH)} ${fmt(p.vx)} ${fmt(p.vy)} cm\n` +
+          `/${p.name} Do\nQ\n`
+      }
+      ops += 'Q\n'
+      const wrapped = concatBytes([
+        enc.encode('q\n'),
+        readPageContents(pageObj),
+        enc.encode('\nQ\n'),
+        enc.encode(ops)
+      ])
+      pageObj.put('Contents', d.addStream(wrapped, {}))
+    }
+  })
+  return getInfo()
+}
+
 // Small→large kana, so OCR variants like "シュン" / "シユン" fold together.
 const SMALL_KANA = 'ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ'
 const LARGE_KANA = 'あいうえおつやゆよわアイウエオツヤユヨワ'
@@ -1206,6 +1347,38 @@ export function extractCandidates(): TermCount[] {
     // Explicit 〒 form, or a NNN-NNNN not embedded inside a longer digit run
     // (so phone numbers like 090-1234-5678 don't masquerade as postal codes).
     { kind: '郵便番号', re: /〒\s?\d{3}-\d{4}|(?<![\d-])\d{3}-\d{4}(?![\d-])/g },
+    // Credit card: 16 digits in four groups (space/hyphen optional), not inside a
+    // longer digit run. Checked before マイナンバー so a spaced 16-digit number is
+    // not mistaken for a 12-digit one.
+    {
+      kind: 'カード番号',
+      re: /(?<![\d-])(?:\d{4}[-\s]?){3}\d{4}(?![\d-])/g
+    },
+    // My Number: 12 digits, optionally grouped in 4s.
+    {
+      kind: 'マイナンバー・ID',
+      re: /(?<![\d-])\d{4}[-\s]?\d{4}[-\s]?\d{4}(?![\d-])/g
+    },
+    // Bank account: a 6–8 digit number carrying an explicit account label.
+    {
+      kind: '口座番号',
+      re: /(?:口座番号|普通|当座|口座)[\s:：]*\d{6,8}/g
+    },
+    // Full dates — Japanese era (令和6年1月2日) or Western (2024年1月2日 / 2024/1/2 /
+    // 2024-01-02). Likely 生年月日・日付; the user reviews before redacting.
+    {
+      kind: '日付・生年月日',
+      re: /(?:明治|大正|昭和|平成|令和)\s?\d{1,2}\s?年\s?\d{1,2}\s?月\s?\d{1,2}\s?日/g
+    },
+    {
+      kind: '日付・生年月日',
+      re: /\d{4}\s?[年./-]\s?\d{1,2}\s?[月./-]\s?\d{1,2}\s?日?/g
+    },
+    // Address: a 都道府県 followed by 市区郡町村 and the run up to the first number.
+    {
+      kind: '住所',
+      re: /(?:東京都|北海道|(?:大阪|京都)府|[一-龥]{2,3}県)[一-龥ぁ-んァ-ヶA-Za-z0-9０-９]{1,10}?[市区郡町村][一-龥ぁ-んァ-ヶ0-9０-９ー\-丁目番地号]{0,24}/g
+    },
     { kind: 'URL', re: /https?:\/\/[^\s「」、。]+/g },
     {
       kind: '組織',
@@ -1922,8 +2095,26 @@ export function addStamp(opts: StampOptions): DocumentInfo {
   return getInfo()
 }
 
-/** Serialize the current document to PDF bytes (garbage-collected & compacted). */
-export function saveToBuffer(): Uint8Array {
+/**
+ * mupdf save-option fragment that turns on AES-256 encryption for `password`
+ * (empty when no password). Composed onto any save so encryption combines with
+ * a size profile or image-flattening. The password must not contain a comma —
+ * mupdf's options are a comma-separated string. (Verified: letters/digits/
+ * symbols/日本語 all round-trip; only ',' breaks it.)
+ */
+function encryptSuffix(password?: string): string {
+  if (!password) return ''
+  if (password.includes(',')) {
+    throw new Error('パスワードにカンマ「,」は使用できません')
+  }
+  return `,encrypt=aes-256,user-password=${password},owner-password=${password}`
+}
+
+/**
+ * Serialize the current document to PDF bytes (garbage-collected & compacted).
+ * When `password` is given the output is AES-256 encrypted.
+ */
+export function saveToBuffer(password?: string): Uint8Array {
   const d = requireDoc()
   // mupdf's `garbage` compaction renumbers objects and invalidates the undo
   // journal — running it on the live document would silently break Ctrl+Z after
@@ -1934,7 +2125,7 @@ export function saveToBuffer(): Uint8Array {
   const tmp = mupdf.Document.openDocument(plain, 'application/pdf').asPDF()
   if (!tmp) return plain
   try {
-    const buf = tmp.saveToBuffer('garbage=compact,sanitize=yes')
+    const buf = tmp.saveToBuffer('garbage=compact,sanitize=yes' + encryptSuffix(password))
     // Copy out of the WASM heap *before* freeing the buffer. asUint8Array() is a
     // view into the heap; destroying the buffer frees that memory (the allocator
     // then writes free-list pointers into the first bytes), so the copy must run
@@ -2086,19 +2277,26 @@ function optimizeImages(d: mupdf.PDFDocument, maxDpi: number, quality: number): 
   }
 }
 
-/** Serialize with a size profile. 'original' == saveToBuffer(). */
-export function saveToBufferProfiled(profile: SaveProfile): Uint8Array {
-  if (profile === 'original') return saveToBuffer()
+/**
+ * Serialize with a size profile. 'original' == saveToBuffer(). When `password`
+ * is given the output is AES-256 encrypted (encryption composes with the profile).
+ */
+export function saveToBufferProfiled(
+  profile: SaveProfile,
+  password?: string
+): Uint8Array {
+  if (profile === 'original') return saveToBuffer(password)
   const { maxDpi, quality } = PROFILE_SETTINGS[profile]
   const d = requireDoc()
   // Optimize on an independent, journal-safe copy; never touch the live doc.
   const plain = Uint8Array.from(d.saveToBuffer('').asUint8Array())
   const tmp = mupdf.Document.openDocument(plain, 'application/pdf').asPDF()
-  if (!tmp) return saveToBuffer()
+  if (!tmp) return saveToBuffer(password)
   try {
     optimizeImages(tmp, maxDpi, quality)
     const buf = tmp.saveToBuffer(
-      'garbage=compact,sanitize=yes,compress-images,compress-fonts,compress'
+      'garbage=compact,sanitize=yes,compress-images,compress-fonts,compress' +
+        encryptSuffix(password)
     )
     const out = Uint8Array.from(buf.asUint8Array())
     buf.destroy?.()
@@ -2106,6 +2304,67 @@ export function saveToBufferProfiled(profile: SaveProfile): Uint8Array {
   } finally {
     tmp.destroy?.()
   }
+}
+
+// ─── Extract / trim pages ─────────────────────────────────────────────────────
+
+/** Build a new PDF containing only the given pages (grafted in sorted order). */
+export function extractPagesToBuffer(indices: number[]): Uint8Array {
+  const d = requireDoc()
+  const count = d.countPages()
+  const sorted = [...new Set(indices)]
+    .filter((i) => i >= 0 && i < count)
+    .sort((a, b) => a - b)
+  if (sorted.length === 0) throw new Error('抽出するページがありません')
+  const out = new mupdf.PDFDocument()
+  try {
+    for (const i of sorted) out.graftPage(out.countPages(), d, i)
+    const buf = out.saveToBuffer('garbage=compact,sanitize=yes,compress')
+    const bytes = Uint8Array.from(buf.asUint8Array())
+    buf.destroy?.()
+    return bytes
+  } finally {
+    out.destroy?.()
+  }
+}
+
+/**
+ * Trim a uniform margin (mm) off every edge of the given pages. The content is
+ * translated so the trimmed region maps to a fresh [0,0,W',H'] MediaBox/CropBox
+ * (origin stays at 0 — the renderer maps canvas px → pt without an origin offset,
+ * so a shifted box would break click/selection alignment). A symmetric inset is
+ * rotation-invariant. Content outside the new box is clipped but still present
+ * in the file — to remove it entirely, save as an image PDF. One undoable op.
+ */
+export function trimPages(indices: number[], marginMm: number): DocumentInfo {
+  const d = requireDoc()
+  const m = Math.max(0, marginMm) * MM_TO_PT
+  const targets = [...new Set(indices)].filter(
+    (i) => i >= 0 && i < d.countPages()
+  )
+  if (m <= 0 || targets.length === 0) return getInfo()
+  const enc = new TextEncoder()
+  operation('余白のトリミング', () => {
+    for (const i of targets) {
+      const page = d.loadPage(i)
+      const obj = page.getObject()
+      const [llx, lly, urx, ury] = mediaBox(page)
+      const W = urx - llx
+      const H = ury - lly
+      // Refuse to trim so much that almost nothing (< ~7mm) would remain.
+      if (W - 2 * m <= 20 || H - 2 * m <= 20) continue
+      const tx = -(llx + m)
+      const ty = -(lly + m)
+      const prefix = enc.encode(`q 1 0 0 1 ${fmt(tx)} ${fmt(ty)} cm\n`)
+      const suffix = enc.encode('\nQ\n')
+      const original = readPageContents(obj)
+      obj.put('Contents', d.addStream(concatBytes([prefix, original, suffix]), {}))
+      putBox(d, obj, 'MediaBox', W - 2 * m, H - 2 * m)
+      putBox(d, obj, 'CropBox', W - 2 * m, H - 2 * m)
+      transformAnnotations(page, [1, 0, 0, 1, tx, ty])
+    }
+  })
+  return getInfo()
 }
 
 // ─── Flatten to images (柱2): rasterize every page ───────────────────────────
@@ -2117,8 +2376,11 @@ export function saveToBufferProfiled(profile: SaveProfile): Uint8Array {
 const FLATTEN_DPI = 200
 const FLATTEN_QUALITY = 80
 
-/** Serialize the current document as an image-only PDF (one JPEG per page). */
-export function flattenToImages(): Uint8Array {
+/**
+ * Serialize the current document as an image-only PDF (one JPEG per page). When
+ * `password` is given the output is AES-256 encrypted.
+ */
+export function flattenToImages(password?: string): Uint8Array {
   const d = requireDoc()
   const zoom = FLATTEN_DPI / 72
   const out = new mupdf.PDFDocument()
@@ -2145,7 +2407,9 @@ export function flattenToImages(): Uint8Array {
       const pageObj = out.addPage([0, 0, wpt, hpt], 0, res, content)
       out.insertPage(out.countPages(), pageObj)
     }
-    const buf = out.saveToBuffer('garbage=compact,sanitize=yes,compress-images')
+    const buf = out.saveToBuffer(
+      'garbage=compact,sanitize=yes,compress-images' + encryptSuffix(password)
+    )
     const bytes = Uint8Array.from(buf.asUint8Array())
     buf.destroy?.()
     return bytes

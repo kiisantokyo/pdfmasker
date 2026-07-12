@@ -4,7 +4,11 @@ import { pdfApi } from '../lib/api'
 
 interface Props {
   onClose: () => void
-  onAddRects: (rects: RedactionRect[], summary: string) => void
+  onAddRects: (
+    rects: RedactionRect[],
+    summary: string,
+    terms?: string[]
+  ) => void
 }
 
 type Scope = 'all' | 'first'
@@ -276,7 +280,8 @@ export default function RedactByTermsModal({
       )
       onAddRects(
         rects,
-        `${selected.length} 語・${rects.length} 箇所をマークしました。`
+        `${selected.length} 語・${rects.length} 箇所をマークしました。`,
+        selected.map((c) => c.text)
       )
       onClose()
     } finally {

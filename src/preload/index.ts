@@ -71,6 +71,9 @@ const api = {
     fill?: 'black' | 'white'
   ): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.applyRedactions, rects, fill),
+  /** True-redact each rect and paint a pixelated (mosaic) render back over it. */
+  mosaic: (rects: RedactionRect[]): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.mosaic, rects),
   wordAt: (pageIndex: number, x: number, y: number): Promise<WordHit | null> =>
     ipcRenderer.invoke(IPC.wordAt, pageIndex, x, y),
   selectText: (
@@ -158,13 +161,19 @@ const api = {
   undo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.undo),
   redo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.redo),
   save: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.save),
+  /** Save as PDF with a size profile; `password` (optional) → AES-256 encrypted. */
   saveAsSized: (
     profile: SaveProfile,
-    nameOpts?: SaveNameOptions
+    nameOpts?: SaveNameOptions,
+    password?: string
   ): Promise<SaveResult> =>
-    ipcRenderer.invoke(IPC.saveAsSized, profile, nameOpts),
-  saveAsFlattened: (): Promise<SaveResult> =>
-    ipcRenderer.invoke(IPC.saveAsFlattened),
+    ipcRenderer.invoke(IPC.saveAsSized, profile, nameOpts, password),
+  /** Save as an image-only PDF; `password` (optional) → AES-256 encrypted. */
+  saveAsFlattened: (
+    nameOpts?: SaveNameOptions,
+    password?: string
+  ): Promise<SaveResult> =>
+    ipcRenderer.invoke(IPC.saveAsFlattened, nameOpts, password),
   /** Export the given page as a PNG image (current page only). */
   saveAsImage: (
     index: number,
@@ -183,6 +192,15 @@ const api = {
   /** Ctrl+V on the welcome screen: load a clipboard image, or null if none. */
   pasteFromClipboard: (): Promise<OpenResult | null> =>
     ipcRenderer.invoke(IPC.pasteFromClipboard),
+  /** Write the given pages to a separate PDF file (dialog picks the path). */
+  extractPages: (
+    indices: number[],
+    nameOpts?: SaveNameOptions
+  ): Promise<SaveResult> =>
+    ipcRenderer.invoke(IPC.extractPages, indices, nameOpts),
+  /** Trim a uniform margin (mm) off every edge of the given pages. */
+  trimPages: (indices: number[], marginMm: number): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.trimPages, indices, marginMm),
   cleanForSubmission: (): Promise<CleanReport> =>
     ipcRenderer.invoke(IPC.cleanForSubmission),
   hasUnsavedChanges: (): Promise<boolean> =>

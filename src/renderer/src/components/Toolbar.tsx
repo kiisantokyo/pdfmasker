@@ -18,6 +18,7 @@ interface Props {
   onRedact: () => void
   onWhiteFill: () => void
   onHighlight: () => void
+  onMosaic: () => void
   onExpandSameWord: () => void
   canExpand: boolean
   onSearchAdd: (keyword: string) => void
@@ -37,12 +38,12 @@ interface Props {
   onZoom: (z: number) => void
   onSave: () => void
   onSaveSized: () => void
-  onSaveImage: () => void
   onCopyImage: () => void
   onCopyRegion: () => void
-  onSaveFlattened: () => void
   onCleanForSubmission: () => void
   onCompareText: () => void
+  onCheckResidual: () => void
+  onReview: () => void
 }
 
 export default function Toolbar(props: Props): React.JSX.Element {
@@ -116,6 +117,15 @@ export default function Toolbar(props: Props): React.JSX.Element {
           <span className="act-count">{pendingCount}</span>
         </button>
         <button
+          className="act act-mosaic"
+          onClick={props.onMosaic}
+          disabled={d || pendingCount === 0}
+          title="選択した範囲の下にある文字・画像を完全に削除し、モザイク（ぼかし）で覆います"
+        >
+          <span className="act-icon">▦</span>モザイク
+          <span className="act-count">{pendingCount}</span>
+        </button>
+        <button
           onClick={props.onExpandSameWord}
           disabled={d || !props.canExpand}
           title="直前に選んだ文字列と同じ語を文書内から探して選択に追加します"
@@ -128,6 +138,13 @@ export default function Toolbar(props: Props): React.JSX.Element {
           title="選択をクリア"
         >
           ✕
+        </button>
+        <button
+          onClick={props.onReview}
+          disabled={d || pendingCount === 0}
+          title="選択中（未適用）の一覧を開き、個別に削除したり理由メモを付けられます"
+        >
+          一覧 {pendingCount}
         </button>
 
         <span className="search-box">
@@ -288,18 +305,9 @@ export default function Toolbar(props: Props): React.JSX.Element {
                   setSaveMenu(false)
                   props.onSaveSized()
                 }}
+                title="通常PDF／パスワード付きPDF／画像化PDF／PNG画像から選んで保存します"
               >
                 名前を付けて保存…
-              </button>
-              <button
-                role="menuitem"
-                onClick={() => {
-                  setSaveMenu(false)
-                  props.onSaveImage()
-                }}
-                title="現在のページを1枚のPNG画像ファイルとして保存します"
-              >
-                このページをPNG画像で保存…
               </button>
               <button
                 role="menuitem"
@@ -319,17 +327,7 @@ export default function Toolbar(props: Props): React.JSX.Element {
                 }}
                 title="ドラッグした矩形の範囲だけを画像としてクリップボードにコピーします"
               >
-                クリップボードへコピー（矩形選択）…
-              </button>
-              <button
-                role="menuitem"
-                onClick={() => {
-                  setSaveMenu(false)
-                  props.onSaveFlattened()
-                }}
-                title="全ページを画像化したPDFとして保存（隠し文字・メタデータ等を原理的に完全除去）"
-              >
-                画像化PDFで保存（隠し情報を完全除去）…
+                クリップボードにコピー（矩形選択）…
               </button>
             </div>
           )}
@@ -367,6 +365,25 @@ export default function Toolbar(props: Props): React.JSX.Element {
         >
           提出前クリーニング
         </button>
+        <button
+          onClick={props.onCheckResidual}
+          disabled={d}
+          title="この作業中に単語クリック・検索・AIで選んだ語が、文書内にまだ残っていないか（墨消し漏れがないか）を確認します"
+        >
+          墨消し漏れチェック
+        </button>
+
+        <span className="spacer" />
+
+        <a
+          className="toolbar-affiliate"
+          href="https://amzn.to/4ww1Pau"
+          target="_blank"
+          rel="noreferrer nofollow sponsored"
+          title="Amazonアソシエイトのリンクです。ご購入いただくと運営者に紹介料が入り、本アプリの無料提供を支えます（購入価格は変わりません）。"
+        >
+          🛒 Amazonでお買い物
+        </a>
       </div>
     </div>
   )
