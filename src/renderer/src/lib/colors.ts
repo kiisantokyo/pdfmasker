@@ -8,14 +8,15 @@ export interface ColorChoice {
   rgb?: TextColor
 }
 
-/** Redaction fill colours. 白 is a true whiteout (no paint over the blank area). */
+/** Redaction fill colours. 白 is a true whiteout (no paint over the blank area).
+ *  Colours are kept soft/pale (目に優しい) — black stays solid as the default. */
 export const REDACT_COLORS: ColorChoice[] = [
   { key: 'black', label: '黒', rgb: { r: 0, g: 0, b: 0 } },
-  { key: 'white', label: '白（塗らない）' },
-  { key: 'gray', label: 'グレー', rgb: { r: 0.5, g: 0.5, b: 0.5 } },
-  { key: 'red', label: '赤', rgb: { r: 0.75, g: 0.1, b: 0.1 } },
-  { key: 'blue', label: '青', rgb: { r: 0.13, g: 0.27, b: 0.7 } },
-  { key: 'green', label: '緑', rgb: { r: 0.09, g: 0.5, b: 0.24 } }
+  { key: 'white', label: '白' },
+  { key: 'gray', label: 'グレー', rgb: { r: 0.8, g: 0.8, b: 0.8 } },
+  { key: 'red', label: '赤', rgb: { r: 0.92, g: 0.66, b: 0.64 } },
+  { key: 'blue', label: '青', rgb: { r: 0.66, g: 0.76, b: 0.92 } },
+  { key: 'green', label: '緑', rgb: { r: 0.68, g: 0.85, b: 0.7 } }
 ]
 
 /** Highlight (marker) colours. All translucent when applied (opacity handled in
