@@ -77,11 +77,16 @@ interface DragState {
   y1: number
 }
 
-/** While dragging a text box by its handle: which box + pointer→box offset (px). */
+/** While dragging a text box: which box + pointer→box offset (px). `fromBody`
+ *  drags start on the box itself, so a click (no real drag) opens it for editing;
+ *  handle drags (`fromBody:false`) always move. */
 interface MoveState {
   id: number
   offX: number
   offY: number
+  fromBody: boolean
+  startX: number
+  startY: number
 }
 
 export default function PageCanvas({
@@ -115,8 +120,9 @@ export default function PageCanvas({
   // Live preview of the text selection (page-space rects) while dragging.
   const [textPreview, setTextPreview] = useState<RedactionRect[]>([])
   const [loading, setLoading] = useState(true)
-  // 文字入れ: pointer-drag state while moving a text box by its handle.
+  // 文字入れ: pointer-drag state while moving a text box.
   const [move, setMove] = useState<MoveState | null>(null)
+  const movedRef = useRef(false)
   // Snap guide line to show while dragging (canvas px; x=vertical, y=horizontal).
   const [snapLine, setSnapLine] = useState<{ x?: number; y?: number } | null>(null)
   const editRef = useRef<HTMLTextAreaElement | null>(null)
@@ -392,14 +398,21 @@ export default function PageCanvas({
     el.style.height = `${el.scrollHeight}px`
   }
 
-  // Drag a text box by its handle: track pointer globally until release. Snaps
-  // the box's baseline/left edge to nearby document text (hold Alt to bypass).
+  // Drag a text box (by its ✥ handle, or by its body when not editing): track the
+  // pointer globally until release. Snaps the box's baseline/left edge to nearby
+  // document text (hold Alt to bypass) and shows the guide line. A body drag with
+  // no real movement is a click → open the box for editing.
   useEffect(() => {
     if (!move) return
     const el = canvasRef.current
     const item = textItems.find((t) => t.id === move.id)
     const onMove = (e: PointerEvent): void => {
       if (!el) return
+      if (!movedRef.current) {
+        // Body drags wait for a small threshold so a click doesn't nudge the box.
+        if (Math.hypot(e.clientX - move.startX, e.clientY - move.startY) < 4) return
+        movedRef.current = true
+      }
       const r = el.getBoundingClientRect()
       let nx = Math.max(0, (e.clientX - r.left - move.offX) / zoom)
       let ny = Math.max(0, (e.clientY - r.top - move.offY) / zoom)
@@ -424,6 +437,8 @@ export default function PageCanvas({
       onUpdateText?.(move.id, { x: nx, y: ny })
     }
     const onUp = (): void => {
+      // A body press that never moved = a click to start editing that box.
+      if (move.fromBody && !movedRef.current) onEditText?.(move.id)
       setMove(null)
       setSnapLine(null)
     }
@@ -433,17 +448,25 @@ export default function PageCanvas({
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
-  }, [move, zoom, onUpdateText, textItems])
+  }, [move, zoom, onUpdateText, onEditText, textItems])
 
-  const startMove = (e: React.PointerEvent, item: TextItem): void => {
+  const beginDrag = (
+    e: React.PointerEvent,
+    item: TextItem,
+    fromBody: boolean
+  ): void => {
     e.preventDefault()
     e.stopPropagation()
     void getGuides()
+    movedRef.current = !fromBody // handle drags move immediately
     const r = canvasRef.current!.getBoundingClientRect()
     setMove({
       id: item.id,
       offX: e.clientX - r.left - item.x * zoom,
-      offY: e.clientY - r.top - item.y * zoom
+      offY: e.clientY - r.top - item.y * zoom,
+      fromBody,
+      startX: e.clientX,
+      startY: e.clientY
     })
   }
 
@@ -469,10 +492,23 @@ export default function PageCanvas({
       const s = e.shiftKey ? 0.25 : 1
       const dx = e.key === 'ArrowLeft' ? -s : e.key === 'ArrowRight' ? s : 0
       const dy = e.key === 'ArrowUp' ? -s : e.key === 'ArrowDown' ? s : 0
-      onUpdateText?.(item.id, {
-        x: Math.max(0, item.x + dx),
-        y: Math.max(0, item.y + dy)
-      })
+      const nx = Math.max(0, item.x + dx)
+      const ny = Math.max(0, item.y + dy)
+      onUpdateText?.(item.id, { x: nx, y: ny })
+      // Flash the guide line when the nudge lands on a document line (feedback
+      // only — nudging stays free, it does not force a snap).
+      const guides = guidesRef.current.data
+      if (guides) {
+        const thr = SNAP_PX / zoom
+        const asc = textAscentPt(item.fontSize)
+        const sb = snapValue(ny + asc, guides.baselines, thr)
+        const sl = snapValue(nx, guides.lefts, thr)
+        flashSnap(
+          sb != null || sl != null
+            ? { x: sl != null ? sl * zoom : undefined, y: sb != null ? sb * zoom : undefined }
+            : null
+        )
+      }
     }
   }
 
@@ -538,7 +574,7 @@ export default function PageCanvas({
               <span
                 className="text-item-handle"
                 title="ドラッグで移動"
-                onPointerDown={(e) => startMove(e, item)}
+                onPointerDown={(e) => beginDrag(e, item, false)}
               >
                 ✥
               </span>
@@ -559,16 +595,20 @@ export default function PageCanvas({
                 if (editing) editRef.current = el
                 if (el) autoGrow(el) // keep every box sized to its content
               }}
-              className="text-item-input"
+              className={'text-item-input' + (textMode && !editing ? ' movable' : '')}
               value={item.text}
               spellCheck={false}
               rows={1}
-              readOnly={!textMode}
+              readOnly={!editing}
               placeholder={editing ? '文字を入力' : ''}
               style={{
                 fontSize: item.fontSize * zoom,
                 lineHeight: TEXT_LINE_HEIGHT,
                 fontFamily: JP_FONT_STACK
+              }}
+              onPointerDown={(e) => {
+                // Not the box being edited: drag to move, or click to edit it.
+                if (textMode && !editing) beginDrag(e, item, true)
               }}
               onFocus={(e) => {
                 onEditText?.(item.id)

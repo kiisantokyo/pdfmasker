@@ -2536,9 +2536,9 @@ export default function App(): React.JSX.Element {
       {textMode && (
         <div className="region-hint" role="status">
           <span>
-            書き込みたい位置を<b>クリック</b>して入力。<b>✥</b>でドラッグ移動
-            （近くの行に自動整列・Altで無効）・Alt+矢印で微調整・周囲のサイズに
-            自動追従。仕上げにツールバーの
+            書き込みたい位置を<b>クリック</b>して入力。確定した枠は<b>ドラッグで
+            移動</b>（近くの行に自動整列・Altで無効）・Alt+矢印で微調整・周囲の
+            サイズに自動追従。仕上げにツールバーの
             <b>「文字{textItems.length > 0 ? `(${textItems.length})` : ''}」</b>
             でPDFに書き込みます。
           </span>

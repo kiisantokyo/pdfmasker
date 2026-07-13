@@ -577,6 +577,10 @@ body {
   outline: 1.5px solid rgba(37, 99, 235, 0.9);
   background: transparent;
 }
+/* A placed (not-being-edited) box: drag its body to move, click to edit. */
+.text-item-input.movable {
+  cursor: move;
+}
 /* Drag handle (move) sits just outside the top-left corner. */
 .text-item-handle {
   position: absolute;
@@ -664,19 +668,18 @@ body {
 .snap-guide {
   position: absolute;
   z-index: 21;
-  background: #ec4899;
-  box-shadow: 0 0 3px rgba(236, 72, 153, 0.7);
+  background: rgba(236, 72, 153, 0.65);
   pointer-events: none;
 }
 .snap-guide.snap-h {
   left: 0;
   right: 0;
-  height: 2px;
+  height: 1px;
 }
 .snap-guide.snap-v {
   top: 0;
   bottom: 0;
-  width: 2px;
+  width: 1px;
 }
 /* Subtle "how to finish" caption under the box being edited. */
 .text-item-hint {
