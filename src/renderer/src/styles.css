@@ -569,13 +569,13 @@ body {
   outline: none;
 }
 .text-item.interactive .text-item-input {
-  /* Faint guide so an empty/!focused box is findable; not burned into the PDF. */
-  outline: 1px dashed rgba(37, 99, 235, 0.55);
-  background: rgba(255, 255, 255, 0.35);
+  /* Dashed guide only (no fill) so it never hides underlying rules/gridlines. */
+  outline: 1px dashed rgba(37, 99, 235, 0.7);
+  background: transparent;
 }
 .text-item.editing .text-item-input {
   outline: 1.5px solid rgba(37, 99, 235, 0.9);
-  background: rgba(255, 255, 255, 0.6);
+  background: transparent;
 }
 /* Drag handle (move) sits just outside the top-left corner. */
 .text-item-handle {

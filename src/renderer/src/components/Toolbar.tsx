@@ -75,6 +75,7 @@ export default function Toolbar(props: Props): React.JSX.Element {
     <div className="toolbar">
       {/* Row 1 — 選択・墨消しの主作業 */}
       <div className="toolbar-row">
+        <span className="toolbar-group-label">墨消し：</span>
         <button onClick={props.onOpen} disabled={busy}>
           開く…
         </button>
@@ -200,6 +201,7 @@ export default function Toolbar(props: Props): React.JSX.Element {
 
       {/* Row 2 — ページ・文書の編集と保存 */}
       <div className="toolbar-row">
+        <span className="toolbar-group-label">編集：</span>
         <button onClick={props.onRotateLeft} disabled={d} title="現在のページを左に90°回転">
           ↺ 左
         </button>

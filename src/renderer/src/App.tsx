@@ -797,6 +797,8 @@ export default function App(): React.JSX.Element {
       setDoc(null)
       setPending([])
       dropTextItems()
+      setTextMode(false) // hide the 文字入れ hint bar / deactivate the mode
+      setCopyRegion(false)
       resetHist()
       setDirty(false)
       setCurrentPage(0)
@@ -2711,11 +2713,11 @@ export default function App(): React.JSX.Element {
                 <div>お問い合わせ先：弁護士法人コスモポリタン法律事務所</div>
                 <div>
                   <a
-                    href="https://www.cosmo-law.jp"
+                    href="https://www.cosmo-law.jp/pdfmasker/"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    https://www.cosmo-law.jp
+                    https://www.cosmo-law.jp/pdfmasker/
                   </a>
                 </div>
                 <div>
