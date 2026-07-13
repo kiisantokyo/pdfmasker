@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RedactionRect, SelectMode, TextItem } from '@shared/types'
+import type { RedactionRect, SelectMode, TextGuides, TextItem } from '@shared/types'
 import { pdfApi } from '../lib/api'
-import { JP_FONT_STACK, TEXT_LINE_HEIGHT } from '../lib/textMetrics'
+import {
+  JP_FONT_STACK,
+  SNAP_PX,
+  TEXT_LINE_HEIGHT,
+  snapValue,
+  textAscentPt
+} from '../lib/textMetrics'
 
 interface Props {
   pageIndex: number
@@ -101,7 +107,25 @@ export default function PageCanvas({
   const [loading, setLoading] = useState(true)
   // 文字入れ: pointer-drag state while moving a text box by its handle.
   const [move, setMove] = useState<MoveState | null>(null)
+  // Snap guide line to show while dragging (canvas px; x=vertical, y=horizontal).
+  const [snapLine, setSnapLine] = useState<{ x?: number; y?: number } | null>(null)
   const editRef = useRef<HTMLTextAreaElement | null>(null)
+  // Alignment guides for THIS page, fetched lazily and cached per render.
+  const guidesRef = useRef<{ key: number; g: TextGuides | null }>({ key: -1, g: null })
+  const ensureGuides = useCallback(() => {
+    const gr = guidesRef.current
+    if (gr.key !== refreshKey) {
+      gr.key = refreshKey
+      gr.g = null
+    }
+    if (gr.g) return
+    pdfApi
+      .textGuides(pageIndex)
+      .then((g) => {
+        if (guidesRef.current.key === refreshKey) guidesRef.current.g = g
+      })
+      .catch(() => {})
+  }, [pageIndex, refreshKey])
 
   // Fetch + decode the page render whenever page/zoom/refresh changes.
   useEffect(() => {
@@ -299,29 +323,53 @@ export default function PageCanvas({
     el.style.height = `${el.scrollHeight}px`
   }
 
-  // Drag a text box by its handle: track pointer globally until release.
+  // Drag a text box by its handle: track pointer globally until release. Snaps
+  // the box's baseline/left edge to nearby document text (hold Alt to bypass).
   useEffect(() => {
     if (!move) return
     const el = canvasRef.current
+    const item = textItems.find((t) => t.id === move.id)
     const onMove = (e: PointerEvent): void => {
       if (!el) return
       const r = el.getBoundingClientRect()
-      const nx = (e.clientX - r.left - move.offX) / zoom
-      const ny = (e.clientY - r.top - move.offY) / zoom
-      onUpdateText?.(move.id, { x: Math.max(0, nx), y: Math.max(0, ny) })
+      let nx = Math.max(0, (e.clientX - r.left - move.offX) / zoom)
+      let ny = Math.max(0, (e.clientY - r.top - move.offY) / zoom)
+      let gx: number | undefined
+      let gy: number | undefined
+      const guides = guidesRef.current.g
+      if (guides && item && !e.altKey) {
+        const thr = SNAP_PX / zoom
+        const asc = textAscentPt(item.fontSize)
+        const sb = snapValue(ny + asc, guides.baselines, thr)
+        if (sb != null) {
+          ny = Math.max(0, sb - asc)
+          gy = sb * zoom
+        }
+        const sl = snapValue(nx, guides.lefts, thr)
+        if (sl != null) {
+          nx = sl
+          gx = sl * zoom
+        }
+      }
+      setSnapLine(gx != null || gy != null ? { x: gx, y: gy } : null)
+      onUpdateText?.(move.id, { x: nx, y: ny })
     }
-    const onUp = (): void => setMove(null)
+    const onUp = (): void => {
+      setMove(null)
+      setSnapLine(null)
+    }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
     return () => {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
     }
-  }, [move, zoom, onUpdateText])
+  }, [move, zoom, onUpdateText, textItems])
 
   const startMove = (e: React.PointerEvent, item: TextItem): void => {
     e.preventDefault()
     e.stopPropagation()
+    ensureGuides()
     const r = canvasRef.current!.getBoundingClientRect()
     setMove({
       id: item.id,
@@ -380,6 +428,14 @@ export default function PageCanvas({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       />
+
+      {/* Alignment guide lines shown while a box snaps to document text. */}
+      {snapLine?.y != null && (
+        <div className="snap-guide snap-h" style={{ top: snapLine.y }} />
+      )}
+      {snapLine?.x != null && (
+        <div className="snap-guide snap-v" style={{ left: snapLine.x }} />
+      )}
 
       {/* 文字入れ: editable WYSIWYG text boxes (shown always; interactive only in
           文字入れ mode). Each box's overlay defines exactly where it will burn. */}

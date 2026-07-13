@@ -23,6 +23,7 @@ import type {
   TermCount,
   TextBoxOptions,
   FontContext,
+  TextGuides,
   WordHit
 } from '../shared/types'
 
@@ -172,6 +173,9 @@ const api = {
     x: number,
     y: number
   ): Promise<FontContext> => ipcRenderer.invoke(IPC.fontContextAt, pageIndex, x, y),
+  /** Alignment guides (text baselines / left edges) for snapping 文字入れ boxes. */
+  textGuides: (pageIndex: number): Promise<TextGuides> =>
+    ipcRenderer.invoke(IPC.textGuides, pageIndex),
   undo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.undo),
   redo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.redo),
   save: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.save),

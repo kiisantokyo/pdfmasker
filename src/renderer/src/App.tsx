@@ -18,11 +18,17 @@ import type {
   StampKind,
   StampPosition,
   TermCount,
+  TextGuides,
   TextItem
 } from '@shared/types'
 import { DEFAULT_NAME_OPTIONS, STAMP_LABELS } from '@shared/types'
 import { pdfApi } from './lib/api'
-import { TEXT_LINE_HEIGHT, textAscentPt } from './lib/textMetrics'
+import {
+  SNAP_PX,
+  TEXT_LINE_HEIGHT,
+  snapValue,
+  textAscentPt
+} from './lib/textMetrics'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
 import ContinuousViewer from './components/ContinuousViewer'
@@ -136,6 +142,29 @@ export default function App(): React.JSX.Element {
   const [textItems, setTextItems] = useState<TextItem[]>([])
   const [editingTextId, setEditingTextId] = useState<number | null>(null)
   const textIdRef = useRef(1)
+  // Per-page alignment guides (text baselines/left edges), cached until the page
+  // is re-rendered (refreshKey changes).
+  const guidesRef = useRef<{ key: number; map: Map<number, TextGuides> }>({
+    key: 0,
+    map: new Map()
+  })
+  const getGuides = useCallback(
+    async (pageIndex: number): Promise<TextGuides> => {
+      const cache = guidesRef.current
+      if (cache.key !== refreshKey) {
+        cache.key = refreshKey
+        cache.map.clear()
+      }
+      const hit = cache.map.get(pageIndex)
+      if (hit) return hit
+      const fresh = await pdfApi
+        .textGuides(pageIndex)
+        .catch(() => ({ baselines: [], lefts: [] }))
+      cache.map.set(pageIndex, fresh)
+      return fresh
+    },
+    [refreshKey]
+  )
   // 隠し文字（透明テキスト）モーダル
   const [hiddenReport, setHiddenReport] = useState<HiddenTextReport | null>(null)
   // 開いたファイルに隠し文字があった件数（警告バナー用。null=警告なし）
@@ -651,11 +680,21 @@ export default function App(): React.JSX.Element {
       // Anchor the click to the vertical CENTRE of the first line, so the box
       // appears where the cursor is (not half a line below it). x stays the left
       // edge. Overlay and burn both use this y, so they still match exactly.
-      const y = Math.max(0, pt.y - (TEXT_LINE_HEIGHT * fontSize) / 2)
+      let x = pt.x
+      let y = Math.max(0, pt.y - (TEXT_LINE_HEIGHT * fontSize) / 2)
+      // 行スナップ: align the new box's baseline / left edge to nearby document
+      // text so it lines up with form fields and table cells.
+      const guides = await getGuides(pageIndex)
+      const thr = SNAP_PX / zoom
+      const asc = textAscentPt(fontSize)
+      const sb = snapValue(y + asc, guides.baselines, thr)
+      if (sb != null) y = Math.max(0, sb - asc)
+      const sl = snapValue(x, guides.lefts, thr)
+      if (sl != null) x = sl
       const id = textIdRef.current++
       setTextItems((items) => [
         ...items,
-        { id, pageIndex, x: pt.x, y, text: '', fontSize }
+        { id, pageIndex, x, y, text: '', fontSize }
       ])
       setEditingTextId(id)
     }, '文字ボックスの追加')
@@ -2546,8 +2585,9 @@ export default function App(): React.JSX.Element {
       {textMode && (
         <div className="region-hint" role="status">
           <span>
-            書き込みたい位置を<b>クリック</b>して入力。<b>✥</b>でドラッグ移動・
-            Alt+矢印で微調整・周囲のサイズに自動追従。仕上げにツールバーの
+            書き込みたい位置を<b>クリック</b>して入力。<b>✥</b>でドラッグ移動
+            （近くの行に自動整列・Altで無効）・Alt+矢印で微調整・周囲のサイズに
+            自動追従。仕上げにツールバーの
             <b>「文字{textItems.length > 0 ? `(${textItems.length})` : ''}」</b>
             でPDFに書き込みます。
           </span>

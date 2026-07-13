@@ -22,6 +22,7 @@ import type {
   TermCount,
   TextBoxOptions,
   FontContext,
+  TextGuides,
   WordHit
 } from '../shared/types'
 import { STAMP_PNG_BASE64 } from './stamp-assets'
@@ -2197,6 +2198,47 @@ function textItemBody(
   }
   body += 'ET\n'
   return body
+}
+
+/**
+ * Collect alignment guides for a page: the baseline y and left edge x of each
+ * existing text line (page points, top-left origin). The renderer snaps a new/
+ * moved text box to these so 文字入れ lines up with the document. Baseline comes
+ * from glyph origins; left edge from the line bbox / glyph quads. Empty for
+ * pages without native text (e.g. un-OCR'd scans).
+ */
+export function pageTextGuides(pageIndex: number): TextGuides {
+  const d = requireDoc()
+  const stext = d.loadPage(pageIndex).toStructuredText()
+  const baseSet = new Set<number>()
+  const leftSet = new Set<number>()
+  const round1 = (v: number): number => Math.round(v * 10) / 10
+  let sum = 0
+  let n = 0
+  let left = Infinity
+  stext.walk({
+    beginLine(bbox) {
+      sum = 0
+      n = 0
+      left = bbox && bbox.length >= 1 ? bbox[0] : Infinity
+    },
+    onChar(_c, origin, _font, _size, quad) {
+      sum += origin[1] // origin sits on the baseline
+      n++
+      const x0 = Math.min(quad[0], quad[2], quad[4], quad[6])
+      if (x0 < left) left = x0
+    },
+    endLine() {
+      if (n > 0) {
+        baseSet.add(round1(sum / n))
+        if (Number.isFinite(left)) leftSet.add(round1(left))
+      }
+    }
+  })
+  return {
+    baselines: [...baseSet].sort((a, b) => a - b),
+    lefts: [...leftSet].sort((a, b) => a - b)
+  }
 }
 
 /**

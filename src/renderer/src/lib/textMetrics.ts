@@ -15,6 +15,30 @@ export const JP_FONT_STACK =
 /** Line-to-line spacing as a multiple of font size (overlay CSS + burn leading). */
 export const TEXT_LINE_HEIGHT = 1.3
 
+/** Snap distance in screen pixels: a box snaps to a guide within this range. */
+export const SNAP_PX = 8
+
+/**
+ * Nearest candidate to `value` within `threshold`, or null if none is close.
+ * Used to snap a text box's baseline/left edge to the document's text guides.
+ */
+export function snapValue(
+  value: number,
+  candidates: number[],
+  threshold: number
+): number | null {
+  let best: number | null = null
+  let bestD = threshold
+  for (const c of candidates) {
+    const dd = Math.abs(c - value)
+    if (dd <= bestD) {
+      bestD = dd
+      best = c
+    }
+  }
+  return best
+}
+
 // Cache one measuring context; measureText font metrics are text-independent.
 let measureCtx: CanvasRenderingContext2D | null | undefined
 

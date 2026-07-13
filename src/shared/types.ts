@@ -272,6 +272,18 @@ export interface FontContext {
   fontSize: number | null
 }
 
+/**
+ * Alignment guides for a page: the baselines and left edges of existing text
+ * lines (page points). The renderer snaps a text box's baseline / left edge to
+ * these so 文字入れ aligns with the document (form fields, table cells).
+ */
+export interface TextGuides {
+  /** Baseline y of each text line. */
+  baselines: number[]
+  /** Left edge x of each text line/run. */
+  lefts: number[]
+}
+
 /** Predefined red 朱印 stamps (keys match STAMP_PNG_BASE64 / the asset script). */
 export type StampKind =
   | 'maru-hi'
@@ -387,6 +399,7 @@ export const IPC = {
   insertText: 'pdf:insertText',
   insertTexts: 'pdf:insertTexts',
   fontContextAt: 'pdf:fontContextAt',
+  textGuides: 'pdf:textGuides',
   undo: 'pdf:undo',
   redo: 'pdf:redo',
   save: 'pdf:save',

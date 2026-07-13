@@ -436,6 +436,10 @@ function registerIpc(): void {
       pdf.fontContextAt(pageIndex, x, y)
   )
 
+  ipcMain.handle(IPC.textGuides, (_e, pageIndex: number) =>
+    pdf.pageTextGuides(pageIndex)
+  )
+
   ipcMain.handle(IPC.undo, () => pdf.undo())
   ipcMain.handle(IPC.redo, () => pdf.redo())
 
