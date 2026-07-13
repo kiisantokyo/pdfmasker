@@ -212,6 +212,41 @@ export interface PageNumberOptions {
   rangeTo: number
 }
 
+/** RGB colour, components in 0..1, for inserted text. */
+export interface TextColor {
+  r: number
+  g: number
+  b: number
+}
+
+/**
+ * A text box to burn into a page (phase 1: a single left-aligned run, no border
+ * or background). The insertion point is in *visual* points: x from the left
+ * edge, y from the TOP of the visually-upright page — the same top-left-origin
+ * space the renderer uses for redaction rects (canvas px ÷ zoom).
+ */
+export interface TextBoxOptions {
+  pageIndex: number
+  /** Top-left corner of the text, visual points from the page's top-left. */
+  x: number
+  y: number
+  /** The text to draw (may contain newlines for multi-line boxes). */
+  text: string
+  /** Font size in points. */
+  fontSize: number
+  /** Text colour (defaults to near-black 0.1). */
+  color?: TextColor
+}
+
+/**
+ * Font context sampled near a click point, used to seed the inline text
+ * editor's defaults so a new box matches the surrounding document text.
+ */
+export interface FontContext {
+  /** Nearest existing text's size in points, or null if none is near. */
+  fontSize: number | null
+}
+
 /** Predefined red 朱印 stamps (keys match STAMP_PNG_BASE64 / the asset script). */
 export type StampKind =
   | 'maru-hi'
@@ -324,6 +359,8 @@ export const IPC = {
   bindingMargin: 'pdf:bindingMargin',
   addPageNumbers: 'pdf:addPageNumbers',
   addStamp: 'pdf:addStamp',
+  insertText: 'pdf:insertText',
+  fontContextAt: 'pdf:fontContextAt',
   undo: 'pdf:undo',
   redo: 'pdf:redo',
   save: 'pdf:save',

@@ -21,6 +21,8 @@ import type {
   ScopedTerm,
   StampOptions,
   TermCount,
+  TextBoxOptions,
+  FontContext,
   WordHit
 } from '../shared/types'
 
@@ -158,6 +160,15 @@ const api = {
     ipcRenderer.invoke(IPC.addPageNumbers, opts),
   addStamp: (opts: StampOptions): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.addStamp, opts),
+  /** Burn a text box into a page as real embedded (selectable) text. */
+  insertText: (opts: TextBoxOptions): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.insertText, opts),
+  /** Sample the nearest existing text's size (pt) to seed the editor default. */
+  fontContextAt: (
+    pageIndex: number,
+    x: number,
+    y: number
+  ): Promise<FontContext> => ipcRenderer.invoke(IPC.fontContextAt, pageIndex, x, y),
   undo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.undo),
   redo: (): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.redo),
   save: (): Promise<SaveResult> => ipcRenderer.invoke(IPC.save),

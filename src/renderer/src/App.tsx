@@ -127,6 +127,9 @@ export default function App(): React.JSX.Element {
   const [reasons, setReasons] = useState<Record<string, string>>({})
   // 範囲を選んでクリップボードにコピー（ワンショット）。true の間だけ十字ドラッグ。
   const [copyRegion, setCopyRegion] = useState(false)
+  // 文字入れモード（クリックでその場に文字を挿入）。直前に使ったサイズを既定に引き継ぐ。
+  const [textMode, setTextMode] = useState(false)
+  const [lastFontSize, setLastFontSize] = useState(10.5)
   // 隠し文字（透明テキスト）モーダル
   const [hiddenReport, setHiddenReport] = useState<HiddenTextReport | null>(null)
   // 開いたファイルに隠し文字があった件数（警告バナー用。null=警告なし）
@@ -622,6 +625,32 @@ export default function App(): React.JSX.Element {
       setStampOpen(false)
       setStatus(`スタンプ「${STAMP_LABELS[stampKind]}」を押しました。`)
     }, 'スタンプの付与')
+
+  // 文字入れ: burn a draft text box into the page as real embedded text. This is
+  // a content-only change (like スタンプ), so pending marks are kept across undo.
+  const insertText = (
+    pageIndex: number,
+    pt: { x: number; y: number },
+    text: string,
+    fontSize: number
+  ): Promise<void> =>
+    run(async () => {
+      if (!doc || !text.trim()) return
+      const cur = pending
+      const info = await pdfApi.insertText({
+        pageIndex,
+        x: pt.x,
+        y: pt.y,
+        text,
+        fontSize
+      })
+      pushHist(true, cur, cur)
+      setDoc(info)
+      setLastFontSize(fontSize)
+      setDirty(true)
+      setRefreshKey((k) => k + 1)
+      setStatus('文字を挿入しました（元に戻すで取消可）。')
+    }, '文字の挿入')
 
   const bulkDelete = (indices: number[]): Promise<void> =>
     run(async () => {
@@ -1135,6 +1164,20 @@ export default function App(): React.JSX.Element {
     window.addEventListener('keydown', onEsc)
     return () => window.removeEventListener('keydown', onEsc)
   }, [copyRegion])
+
+  // Esc leaves 文字入れ mode — but while a draft editor is focused, its own Esc
+  // handler cancels that draft and we stay in the mode (skip when a field is
+  // focused).
+  useEffect(() => {
+    if (!textMode) return
+    const onEsc = (e: KeyboardEvent): void => {
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.key === 'Escape') setTextMode(false)
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [textMode])
 
   const onDragOver = (e: React.DragEvent): void => {
     if (Array.from(e.dataTransfer.types).includes('Files')) {
@@ -2399,6 +2442,11 @@ export default function App(): React.JSX.Element {
         onBindingMargin={() => setBindingOpen(true)}
         onPageNumbers={() => setPnOpen(true)}
         onStamp={() => setStampOpen(true)}
+        textMode={textMode}
+        onToggleTextMode={() => {
+          setCopyRegion(false)
+          setTextMode((v) => !v)
+        }}
         onResizePage={() => setResizeOpen(true)}
         onClearMetadata={openProperties}
         onDeletePage={deletePage}
@@ -2422,6 +2470,18 @@ export default function App(): React.JSX.Element {
           </span>
           <button className="region-hint-cancel" onClick={() => setCopyRegion(false)}>
             取消（Esc）
+          </button>
+        </div>
+      )}
+
+      {textMode && (
+        <div className="region-hint" role="status">
+          <span>
+            文字を書き込みたい位置を<b>クリック</b> → 入力（確定 Ctrl+Enter・
+            微調整 Alt+矢印）。周囲の文字サイズに自動で合わせます。
+          </span>
+          <button className="region-hint-cancel" onClick={() => setTextMode(false)}>
+            終了（Esc）
           </button>
         </div>
       )}
@@ -2494,6 +2554,9 @@ export default function App(): React.JSX.Element {
             onZoomChange={clampZoom}
             regionCopyMode={copyRegion}
             onRegionCopy={onRegionCopy}
+            textMode={textMode}
+            defaultFontSize={lastFontSize}
+            onInsertText={insertText}
           />
         ) : (
           <main className="viewer">

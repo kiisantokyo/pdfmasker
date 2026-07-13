@@ -30,6 +30,15 @@ interface Props {
     pageIndex: number,
     rect: { x0: number; y0: number; x1: number; y1: number }
   ) => void
+  /** 文字入れモード（クリックでその場に文字を挿入）。 */
+  textMode?: boolean
+  defaultFontSize?: number
+  onInsertText?: (
+    pageIndex: number,
+    pagePt: { x: number; y: number },
+    text: string,
+    fontSize: number
+  ) => void
 }
 
 export default function ContinuousViewer({
@@ -46,7 +55,10 @@ export default function ContinuousViewer({
   onTextSelect,
   onZoomChange,
   regionCopyMode = false,
-  onRegionCopy
+  onRegionCopy,
+  textMode = false,
+  defaultFontSize,
+  onInsertText
 }: Props): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const wrapRefs = useRef<Array<HTMLDivElement | null>>([])
@@ -122,6 +134,9 @@ export default function ContinuousViewer({
                 onZoomChange={onZoomChange}
                 regionCopyMode={regionCopyMode}
                 onRegionCopy={onRegionCopy}
+                textMode={textMode}
+                defaultFontSize={defaultFontSize}
+                onInsertText={onInsertText}
               />
             ) : (
               <div className="cv-placeholder" style={{ height: h }} />

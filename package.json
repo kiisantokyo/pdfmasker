@@ -55,6 +55,10 @@
       {
         "from": "THIRD-PARTY-NOTICES.md",
         "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": "resources/fonts",
+        "to": "fonts"
       }
     ],
     "win": {

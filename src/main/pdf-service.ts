@@ -20,6 +20,8 @@ import type {
   ScopedTerm,
   StampOptions,
   TermCount,
+  TextBoxOptions,
+  FontContext,
   WordHit
 } from '../shared/types'
 import { STAMP_PNG_BASE64 } from './stamp-assets'
@@ -2095,6 +2097,136 @@ export function addStamp(opts: StampOptions): DocumentInfo {
   return getInfo()
 }
 
+// --- Text insertion ---------------------------------------------------------
+
+/**
+ * Bundled Japanese font bytes, injected once from the main process (kept out of
+ * this Electron-free core: main reads the file and calls setJpFont). The parsed
+ * mupdf.Font is cached because parsing a full CJK font is not free; it is
+ * document-independent, so we reuse it and only re-`addFont` per document.
+ */
+let jpFontData: Uint8Array | null = null
+let jpFont: mupdf.Font | null = null
+
+/** Supply the Japanese font used for inserted text (TrueType/OpenType bytes). */
+export function setJpFont(data: Uint8Array): void {
+  jpFontData = data
+  jpFont = null
+}
+
+function requireJpFont(): mupdf.Font {
+  if (jpFont) return jpFont
+  if (!jpFontData) {
+    throw new Error('日本語フォントが読み込まれていません（文字入れ機能は未初期化）')
+  }
+  jpFont = new mupdf.Font('PMText', jpFontData, 0)
+  return jpFont
+}
+
+/** Encode a line as a 2-byte hex CID string for an Identity CIDFont (addFont).
+ *  Each Unicode scalar maps to a glyph id via encodeCharacter. */
+function hexCids(font: mupdf.Font, line: string): string {
+  let out = ''
+  for (const ch of line) {
+    const gid = font.encodeCharacter(ch.codePointAt(0) as number)
+    out += (gid & 0xffff).toString(16).padStart(4, '0')
+  }
+  return out
+}
+
+/**
+ * Sample the size of the existing text nearest a click point, so the inline
+ * editor can default a new box to the surrounding document's size. Works in the
+ * same top-left-origin point space the renderer sends (as wordAt/selectText do).
+ * Returns null when no text is near (e.g. a blank margin).
+ */
+export function fontContextAt(
+  pageIndex: number,
+  x: number,
+  y: number
+): FontContext {
+  const d = requireDoc()
+  const stext = d.loadPage(pageIndex).toStructuredText()
+  let bestSize: number | null = null
+  let bestDist = Infinity
+  stext.walk({
+    onChar(_c, _origin, _font, size, quad) {
+      const b = quadToBox(quad)
+      const cx = (b.x0 + b.x1) / 2
+      const cy = (b.y0 + b.y1) / 2
+      const dd = (cx - x) ** 2 + (cy - y) ** 2
+      if (dd < bestDist) {
+        bestDist = dd
+        bestSize = size
+      }
+    }
+  })
+  // Ignore matches that are far away (> ~2cm): a lone label across the page is
+  // not useful context; fall back to the editor's own default instead.
+  if (bestSize != null && bestDist <= 56 * 56) {
+    return { fontSize: Math.round(bestSize * 10) / 10 }
+  }
+  return { fontSize: null }
+}
+
+/**
+ * Burn a text box into a page as real, selectable/searchable text: the Japanese
+ * font is embedded as an Identity CIDFont (subset on save), so glyphs render and
+ * round-trip through extraction. No border or background is drawn (a deliberate
+ * default — the common "form fill" case wants clean text). One journal op = one
+ * undo. Placed via pageVisualMatrix so it stays upright on /Rotate pages.
+ */
+export function insertTextBox(opts: TextBoxOptions): DocumentInfo {
+  const d = requireDoc()
+  const raw = (opts.text ?? '').replace(/\r\n?/g, '\n')
+  if (!raw.trim()) return getInfo()
+  const font = requireJpFont()
+  const size = Math.max(1, opts.fontSize)
+  const col = opts.color ?? { r: 0.1, g: 0.1, b: 0.1 }
+  const lines = raw.split('\n')
+  const leading = size * 1.35 // line-to-line baseline distance
+  // Approximate ascent: place the text's visual top at opts.y (CJK caps sit
+  // ~0.88em above baseline; 0.8 reads well without clipping).
+  const ascent = size * 0.8
+  const enc = new TextEncoder()
+
+  operation('文字の挿入', () => {
+    const fontRef = d.addFont(font)
+    const page = d.loadPage(opts.pageIndex)
+    const pageObj = page.getObject()
+    const [llx, lly, urx, ury] = mediaBox(page)
+    const w = urx - llx
+    const h = ury - lly
+    if (w <= 0 || h <= 0) return
+    const { cm, visH } = pageVisualMatrix(readRotation(page), llx, lly, w, h)
+
+    // First baseline in visual bottom-left space (y up).
+    const bx = opts.x
+    const byTop = visH - (opts.y + ascent)
+
+    let body = 'BT\n' + `/PMTEXT ${fmt(size)} Tf\n`
+    body += `${fmt(col.r)} ${fmt(col.g)} ${fmt(col.b)} rg\n`
+    body += `${fmt(-leading)} TL\n`
+    body += `${fmt(bx)} ${fmt(byTop)} Td\n`
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) body += 'T*\n'
+      body += `<${hexCids(font, lines[i])}> Tj\n`
+    }
+    body += 'ET\n'
+
+    const ops = 'q\n' + `${cm.map(fmt).join(' ')} cm\n` + body + 'Q\n'
+    ownSubDict(d, ownResources(d, pageObj), 'Font').put('PMTEXT', fontRef)
+    const wrapped = concatBytes([
+      enc.encode('q\n'),
+      readPageContents(pageObj),
+      enc.encode('\nQ\n'),
+      enc.encode(ops)
+    ])
+    pageObj.put('Contents', d.addStream(wrapped, {}))
+  })
+  return getInfo()
+}
+
 /**
  * mupdf save-option fragment that turns on AES-256 encryption for `password`
  * (empty when no password). Composed onto any save so encryption combines with
@@ -2125,6 +2257,11 @@ export function saveToBuffer(password?: string): Uint8Array {
   const tmp = mupdf.Document.openDocument(plain, 'application/pdf').asPDF()
   if (!tmp) return plain
   try {
+    // Subset embedded fonts on the throwaway copy: 文字入れ embeds a full CJK
+    // font (~5MB) that would otherwise bloat every save. Runs here (not on the
+    // live doc) so it never invalidates the undo journal. No-op when there is
+    // nothing to subset.
+    tmp.subsetFonts?.()
     const buf = tmp.saveToBuffer('garbage=compact,sanitize=yes' + encryptSuffix(password))
     // Copy out of the WASM heap *before* freeing the buffer. asUint8Array() is a
     // view into the heap; destroying the buffer frees that memory (the allocator
@@ -2294,6 +2431,7 @@ export function saveToBufferProfiled(
   if (!tmp) return saveToBuffer(password)
   try {
     optimizeImages(tmp, maxDpi, quality)
+    tmp.subsetFonts?.() // shrink the embedded 文字入れ CJK font to used glyphs
     const buf = tmp.saveToBuffer(
       'garbage=compact,sanitize=yes,compress-images,compress-fonts,compress' +
         encryptSuffix(password)

@@ -37,6 +37,19 @@ interface Props {
     pageIndex: number,
     rect: { x0: number; y0: number; x1: number; y1: number }
   ) => void
+  /**
+   * 文字入れモード: a click opens an inline draft editor at that spot; on commit
+   * the text is burned into the page as real embedded text.
+   */
+  textMode?: boolean
+  /** Fallback font size (pt) when no nearby text is detected to copy. */
+  defaultFontSize?: number
+  onInsertText?: (
+    pageIndex: number,
+    pagePt: { x: number; y: number },
+    text: string,
+    fontSize: number
+  ) => void
 }
 
 interface DragState {
@@ -44,6 +57,14 @@ interface DragState {
   y0: number
   x1: number
   y1: number
+}
+
+/** In-progress text box: position in canvas px (top-left), size in points. */
+interface TextDraft {
+  x: number
+  y: number
+  text: string
+  size: number
 }
 
 export default function PageCanvas({
@@ -58,7 +79,10 @@ export default function PageCanvas({
   onZoomChange,
   refreshKey,
   regionCopyMode = false,
-  onRegionCopy
+  onRegionCopy,
+  textMode = false,
+  defaultFontSize = 10.5,
+  onInsertText
 }: Props): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -69,6 +93,13 @@ export default function PageCanvas({
   // Live preview of the text selection (page-space rects) while dragging.
   const [textPreview, setTextPreview] = useState<RedactionRect[]>([])
   const [loading, setLoading] = useState(true)
+  // 文字入れ: the draft text box currently being composed (null = none).
+  const [draft, setDraft] = useState<TextDraft | null>(null)
+  const draftRef = useRef<TextDraft | null>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
 
   // Fetch + decode the page render whenever page/zoom/refresh changes.
   useEffect(() => {
@@ -173,7 +204,7 @@ export default function PageCanvas({
     const { x, y } = toCanvasXY(e)
     setDrag({ ...drag, x1: x, y1: y })
 
-    if (selectMode === 'text' && !regionCopyMode) {
+    if (selectMode === 'text' && !regionCopyMode && !textMode) {
       const moved = Math.hypot(x - drag.x0, y - drag.y0)
       const now = performance.now()
       if (moved > 4 && now - lastQuery.current > 40) {
@@ -185,11 +216,57 @@ export default function PageCanvas({
     }
   }
 
+  // Burn the current draft (if any non-empty text) and clear it.
+  const commitDraft = useCallback(() => {
+    const dr = draftRef.current
+    draftRef.current = null
+    setDraft(null)
+    if (dr && dr.text.trim() && onInsertText) {
+      onInsertText(pageIndex, { x: dr.x / zoom, y: dr.y / zoom }, dr.text, dr.size)
+    }
+  }, [pageIndex, zoom, onInsertText])
+
+  // Open a fresh draft at a canvas point, seeding its size from nearby text.
+  const openDraft = useCallback(
+    async (canvasX: number, canvasY: number) => {
+      let s = defaultFontSize
+      try {
+        const ctx = await pdfApi.fontContextAt(pageIndex, canvasX / zoom, canvasY / zoom)
+        if (ctx.fontSize) s = ctx.fontSize
+      } catch {
+        // no context available — keep the fallback size
+      }
+      setDraft({ x: canvasX, y: canvasY, text: '', size: s })
+    },
+    [pageIndex, zoom, defaultFontSize]
+  )
+
+  // Focus the textarea whenever a new draft appears.
+  useEffect(() => {
+    if (draft) taRef.current?.focus()
+  }, [draft?.x, draft?.y])
+
+  // Leaving 文字入れ mode commits whatever is being typed.
+  useEffect(() => {
+    if (!textMode && draftRef.current) commitDraft()
+  }, [textMode, commitDraft])
+
   const onPointerUp = async (e: React.PointerEvent): Promise<void> => {
     if (!drag) return
     const dx = Math.abs(drag.x1 - drag.x0)
     const dy = Math.abs(drag.y1 - drag.y0)
     const isClick = dx <= 4 && dy <= 4
+
+    // 文字入れ: a click places a new text box (committing any current draft).
+    if (textMode) {
+      setDrag(null)
+      setTextPreview([])
+      if (isClick) {
+        if (draftRef.current) commitDraft()
+        void openDraft(drag.x0, drag.y0)
+      }
+      return
+    }
 
     // Region-copy mode: a real drag copies that rectangle; a click does nothing.
     if (regionCopyMode) {
@@ -240,6 +317,41 @@ export default function PageCanvas({
     setTextPreview([])
   }
 
+  const nudge = (dx: number, dy: number): void =>
+    setDraft((d) => (d ? { ...d, x: d.x + dx * zoom, y: d.y + dy * zoom } : d))
+
+  const setDraftSize = (delta: number): void => {
+    setDraft((d) =>
+      d ? { ...d, size: Math.max(4, Math.round((d.size + delta) * 2) / 2) } : d
+    )
+    taRef.current?.focus()
+  }
+
+  const onDraftKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      draftRef.current = null
+      setDraft(null)
+      return
+    }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      commitDraft()
+      return
+    }
+    if (e.altKey && e.key.startsWith('Arrow')) {
+      // Nudge the box: 1pt, or 0.25pt with Shift, for pixel-precise placement.
+      e.preventDefault()
+      const s = e.shiftKey ? 0.25 : 1
+      if (e.key === 'ArrowLeft') nudge(-s, 0)
+      else if (e.key === 'ArrowRight') nudge(s, 0)
+      else if (e.key === 'ArrowUp') nudge(0, -s)
+      else if (e.key === 'ArrowDown') nudge(0, s)
+    }
+  }
+
+  const keepFocus = (e: React.MouseEvent): void => e.preventDefault()
+
   return (
     <div className="canvas-wrap" ref={wrapRef}>
       {loading && <div className="canvas-loading">描画中…</div>}
@@ -251,14 +363,73 @@ export default function PageCanvas({
           'page-canvas' +
           (regionCopyMode
             ? ' mode-region'
-            : selectMode === 'text'
-              ? ' mode-text'
-              : '')
+            : textMode
+              ? ' mode-text-insert'
+              : selectMode === 'text'
+                ? ' mode-text'
+                : '')
         }
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       />
+      {draft && (
+        <div
+          className="text-draft"
+          style={{ left: draft.x, top: draft.y }}
+        >
+          <div className="text-draft-tools" onMouseDown={keepFocus}>
+            <button type="button" title="小さく" onClick={() => setDraftSize(-0.5)}>
+              A−
+            </button>
+            <span className="text-draft-size">{draft.size}pt</span>
+            <button type="button" title="大きく" onClick={() => setDraftSize(0.5)}>
+              A＋
+            </button>
+            <span className="text-draft-sep" />
+            <button
+              type="button"
+              className="text-draft-ok"
+              title="確定（Ctrl+Enter）"
+              onClick={commitDraft}
+            >
+              ✓
+            </button>
+            <button
+              type="button"
+              className="text-draft-cancel"
+              title="取消（Esc）"
+              onClick={() => {
+                draftRef.current = null
+                setDraft(null)
+              }}
+            >
+              ✕
+            </button>
+          </div>
+          <textarea
+            ref={taRef}
+            className="text-draft-input"
+            value={draft.text}
+            spellCheck={false}
+            rows={1}
+            style={{
+              fontSize: draft.size * zoom,
+              lineHeight: 1.35
+            }}
+            onChange={(e) => {
+              const text = e.target.value
+              setDraft((d) => (d ? { ...d, text } : d))
+              // Auto-grow height to fit the content.
+              const el = e.target
+              el.style.height = 'auto'
+              el.style.height = `${el.scrollHeight}px`
+            }}
+            onKeyDown={onDraftKeyDown}
+            onBlur={commitDraft}
+          />
+        </div>
+      )}
     </div>
   )
 }

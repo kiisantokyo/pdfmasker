@@ -20,7 +20,8 @@ import type {
   SaveNameOptions,
   SaveProfile,
   ScopedTerm,
-  StampOptions
+  StampOptions,
+  TextBoxOptions
 } from '../shared/types'
 import * as pdf from './pdf-service'
 import * as license from './license-service'
@@ -421,6 +422,16 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.addStamp, (_e, opts: StampOptions) => pdf.addStamp(opts))
 
+  ipcMain.handle(IPC.insertText, (_e, opts: TextBoxOptions) =>
+    pdf.insertTextBox(opts)
+  )
+
+  ipcMain.handle(
+    IPC.fontContextAt,
+    (_e, pageIndex: number, x: number, y: number) =>
+      pdf.fontContextAt(pageIndex, x, y)
+  )
+
   ipcMain.handle(IPC.undo, () => pdf.undo())
   ipcMain.handle(IPC.redo, () => pdf.redo())
 
@@ -559,8 +570,38 @@ function registerIpc(): void {
   ipcMain.handle(IPC.licenseDeactivate, () => license.deactivate())
 }
 
+/**
+ * Load the bundled Japanese font used by the 文字入れ feature and hand its bytes
+ * to pdf-service (which stays Electron-free). The redistributable production
+ * font ships via extraResources (resources/fonts/pmtext-jp.otf). During local
+ * development, before that asset is added, fall back to a system Japanese font
+ * so the feature is testable — this fallback never ships (packaged builds use
+ * the bundled file). Failure is non-fatal: only 文字入れ is affected.
+ */
+async function loadJpFont(): Promise<void> {
+  const bundled = app.isPackaged
+    ? join(process.resourcesPath, 'fonts', 'pmtext-jp.otf')
+    : join(import.meta.dirname, '../..', 'resources', 'fonts', 'pmtext-jp.otf')
+  const candidates = [bundled]
+  if (!app.isPackaged && process.platform === 'win32') {
+    // Dev-only fallback (not redistributable — never bundled).
+    candidates.push('C:/Windows/Fonts/BIZ-UDGothicR.ttc')
+  }
+  for (const path of candidates) {
+    try {
+      const bytes = await readFile(path)
+      pdf.setJpFont(new Uint8Array(bytes))
+      return
+    } catch {
+      // try the next candidate
+    }
+  }
+  console.warn('[font] 日本語フォントを読み込めませんでした（文字入れは無効）')
+}
+
 app.whenReady().then(() => {
   registerIpc()
+  void loadJpFont()
   createWindow()
 
   app.on('activate', () => {

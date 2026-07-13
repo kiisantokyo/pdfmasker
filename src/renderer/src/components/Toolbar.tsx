@@ -30,6 +30,8 @@ interface Props {
   onBindingMargin: () => void
   onPageNumbers: () => void
   onStamp: () => void
+  textMode: boolean
+  onToggleTextMode: () => void
   onResizePage: () => void
   onClearMetadata: () => void
   onDeletePage: () => void
@@ -249,6 +251,15 @@ export default function Toolbar(props: Props): React.JSX.Element {
           title="「秘」「社外秘」などの赤いスタンプを押します"
         >
           🔴 スタンプ
+        </button>
+
+        <button
+          className={props.textMode ? 'active' : ''}
+          onClick={props.onToggleTextMode}
+          disabled={d}
+          title="クリックした位置に文字を書き込みます（フォームの記入・注記など）"
+        >
+          ✏️ 文字入れ
         </button>
 
         <span className="sep" />
