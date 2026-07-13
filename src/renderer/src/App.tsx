@@ -23,6 +23,8 @@ import type {
 import { DEFAULT_NAME_OPTIONS, STAMP_LABELS } from '@shared/types'
 import { pdfApi } from './lib/api'
 import { TEXT_LINE_HEIGHT, textAscentPt } from './lib/textMetrics'
+import type { ColorChoice } from './lib/colors'
+import { HIGHLIGHT_COLORS, REDACT_COLORS } from './lib/colors'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
 import ContinuousViewer from './components/ContinuousViewer'
@@ -136,6 +138,11 @@ export default function App(): React.JSX.Element {
   const [textItems, setTextItems] = useState<TextItem[]>([])
   const [editingTextId, setEditingTextId] = useState<number | null>(null)
   const textIdRef = useRef(1)
+  // 墨消し・マーカーの選択色（分割ボタンのパレット）。既定=黒／黄。
+  const [redactColor, setRedactColor] = useState<ColorChoice>(REDACT_COLORS[0])
+  const [highlightColor, setHighlightColor] = useState<ColorChoice>(
+    HIGHLIGHT_COLORS[0]
+  )
   // 隠し文字（透明テキスト）モーダル
   const [hiddenReport, setHiddenReport] = useState<HiddenTextReport | null>(null)
   // 開いたファイルに隠し文字があった件数（警告バナー用。null=警告なし）
@@ -430,10 +437,10 @@ export default function App(): React.JSX.Element {
       )
     }, 'プロパティ消去')
 
-  const applyRedactions = (fill: 'black' | 'white' = 'black'): Promise<void> =>
+  const applyRedactions = (): Promise<void> =>
     run(async () => {
       if (pending.length === 0) return
-      const info = await pdfApi.applyRedactions(pending, fill)
+      const info = await pdfApi.applyRedactions(pending, redactColor.rgb)
       pushHist(true, pending, [])
       setDoc(info)
       const removed = pending.length
@@ -441,26 +448,26 @@ export default function App(): React.JSX.Element {
       setDirty(true)
       setRefreshKey((k) => k + 1)
       setStatus(
-        fill === 'white'
-          ? `${removed} 箇所を白塗りしました（下の文字・画像を削除）。`
-          : `${removed} 箇所を墨消ししました（下の文字・画像を削除）。`
+        redactColor.rgb
+          ? `${removed} 箇所を墨消し（${redactColor.label}）しました（下の文字・画像を削除）。`
+          : `${removed} 箇所を白塗りしました（下の文字・画像を削除）。`
       )
       // Residual check is no longer run here (too noisy); it runs when saving
       // (a banner in the save dialog) and via the manual 墨消し漏れチェック button.
-    }, fill === 'white' ? '白塗りの適用' : '墨消しの適用')
+    }, '墨消しの適用')
 
   const applyHighlight = (): Promise<void> =>
     run(async () => {
       if (pending.length === 0) return
-      const info = await pdfApi.highlight(pending)
+      const info = await pdfApi.highlight(pending, highlightColor.rgb)
       pushHist(true, pending, [])
       setDoc(info)
       const n = pending.length
       setPending([])
       setDirty(true)
       setRefreshKey((k) => k + 1)
-      setStatus(`${n} 箇所に黄色マーカーを引きました。`)
-    }, '黄色マーカー')
+      setStatus(`${n} 箇所に${highlightColor.label}マーカーを引きました。`)
+    }, 'マーカー')
 
   const applyMosaic = (): Promise<void> =>
     run(async () => {
@@ -2480,9 +2487,12 @@ export default function App(): React.JSX.Element {
         }
         onOpen={open}
         onClose={closeFile}
-        onRedact={() => applyRedactions('black')}
-        onWhiteFill={() => applyRedactions('white')}
+        onRedact={applyRedactions}
         onHighlight={applyHighlight}
+        redactColor={redactColor}
+        onRedactColor={setRedactColor}
+        highlightColor={highlightColor}
+        onHighlightColor={setHighlightColor}
         onMosaic={applyMosaic}
         onExpandSameWord={expandSameWord}
         canExpand={lastSelText.trim().length > 0}

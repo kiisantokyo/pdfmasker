@@ -21,7 +21,8 @@ import type {
   SaveProfile,
   ScopedTerm,
   StampOptions,
-  TextBoxOptions
+  TextBoxOptions,
+  TextColor
 } from '../shared/types'
 import * as pdf from './pdf-service'
 import * as license from './license-service'
@@ -313,8 +314,8 @@ function registerIpc(): void {
 
   ipcMain.handle(
     IPC.applyRedactions,
-    (_e, rects: RedactionRect[], fill?: 'black' | 'white') => {
-      pdf.applyRedactions(rects, fill ?? 'black')
+    (_e, rects: RedactionRect[], color?: TextColor) => {
+      pdf.applyRedactions(rects, color)
       return pdf.getInfo()
     }
   )
@@ -340,8 +341,8 @@ function registerIpc(): void {
       pdf.selectionString(pageIndex, x0, y0, x1, y1)
   )
 
-  ipcMain.handle(IPC.highlight, (_e, rects: RedactionRect[]) =>
-    pdf.highlightRects(rects)
+  ipcMain.handle(IPC.highlight, (_e, rects: RedactionRect[], color?: TextColor) =>
+    pdf.highlightRects(rects, color)
   )
 
   ipcMain.handle(IPC.findWord, (_e, needle: string) => pdf.findWord(needle))

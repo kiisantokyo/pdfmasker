@@ -22,6 +22,7 @@ import type {
   StampOptions,
   TermCount,
   TextBoxOptions,
+  TextColor,
   FontContext,
   TextGuides,
   WordHit
@@ -71,9 +72,9 @@ const api = {
     ipcRenderer.invoke(IPC.renderPage, index, zoom),
   applyRedactions: (
     rects: RedactionRect[],
-    fill?: 'black' | 'white'
+    color?: TextColor
   ): Promise<DocumentInfo> =>
-    ipcRenderer.invoke(IPC.applyRedactions, rects, fill),
+    ipcRenderer.invoke(IPC.applyRedactions, rects, color),
   /** True-redact each rect and paint a pixelated (mosaic) render back over it. */
   mosaic: (rects: RedactionRect[]): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.mosaic, rects),
@@ -95,8 +96,10 @@ const api = {
     y1: number
   ): Promise<{ text: string; rects: RedactionRect[] }> =>
     ipcRenderer.invoke(IPC.selectionString, pageIndex, x0, y0, x1, y1),
-  highlight: (rects: RedactionRect[]): Promise<DocumentInfo> =>
-    ipcRenderer.invoke(IPC.highlight, rects),
+  highlight: (
+    rects: RedactionRect[],
+    color?: TextColor
+  ): Promise<DocumentInfo> => ipcRenderer.invoke(IPC.highlight, rects, color),
   findWord: (needle: string): Promise<RedactionRect[]> =>
     ipcRenderer.invoke(IPC.findWord, needle),
   extractCandidates: (): Promise<TermCount[]> =>

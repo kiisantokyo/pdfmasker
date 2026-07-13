@@ -21,6 +21,7 @@ import type {
   StampOptions,
   TermCount,
   TextBoxOptions,
+  TextColor,
   FontContext,
   TextGuides,
   WordHit
@@ -409,7 +410,7 @@ export function renderRegionImage(
  */
 export function applyRedactions(
   rects: RedactionRect[],
-  fill: 'black' | 'white' = 'black'
+  color?: TextColor
 ): void {
   const d = requireDoc()
   if (rects.length === 0) return
@@ -421,7 +422,7 @@ export function applyRedactions(
     byPage.set(r.pageIndex, list)
   }
 
-  operation(fill === 'white' ? '白塗りの適用' : '墨消しの適用', () => {
+  operation(color ? '墨消しの適用' : '白塗りの適用', () => {
     for (const [pageIndex, pageRects] of byPage) {
       const page = d.loadPage(pageIndex)
       for (const r of pageRects) {
@@ -434,15 +435,52 @@ export function applyRedactions(
         ])
         annot.update()
       }
-      // black_boxes=true paints a solid black box; false leaves the (white)
-      // page showing through — a whiteout. Either way the covered content is
-      // truly removed (verified: extractable text → 0 for both).
-      // REDACT_IMAGE_PIXELS clears only the covered pixels of an image — so a
-      // scanned/full-page-image PDF keeps the rest of the page intact (REMOVE
-      // would delete the whole intersecting image, wiping the page).
-      page.applyRedactions(fill === 'black', mupdf.PDFPage.REDACT_IMAGE_PIXELS)
+      // Always whiteout (black_boxes=false): the covered content is truly removed
+      // (verified: extractable text → 0), leaving the area blank. We then paint a
+      // solid rectangle in the chosen colour on top — this is what lets the fill
+      // be any colour (mupdf's own redaction fill is limited to black/whiteout).
+      // REDACT_IMAGE_PIXELS clears only the covered pixels of an image, so a
+      // scanned/full-page-image PDF keeps the rest of the page intact.
+      page.applyRedactions(false, mupdf.PDFPage.REDACT_IMAGE_PIXELS)
+      // color === undefined ⇒ whiteout (leave the blank area showing).
+      if (color) paintFilledRects(d, page, pageRects, color)
     }
   })
+}
+
+/** Paint solid filled rectangles (page space, top-left origin) onto a page in a
+ *  given colour, via a content-stream append. Rotation-aware (pageVisualMatrix).
+ *  Used to colour redaction boxes after the content beneath is removed. */
+function paintFilledRects(
+  d: mupdf.PDFDocument,
+  page: mupdf.PDFPage,
+  rects: RedactionRect[],
+  color: TextColor
+): void {
+  const pageObj = page.getObject()
+  const [llx, lly, urx, ury] = mediaBox(page)
+  const w = urx - llx
+  const h = ury - lly
+  if (w <= 0 || h <= 0) return
+  const { cm, visH } = pageVisualMatrix(readRotation(page), llx, lly, w, h)
+  let inner = `${fmt(color.r)} ${fmt(color.g)} ${fmt(color.b)} rg\n`
+  for (const r of rects) {
+    const x0 = Math.min(r.x0, r.x1)
+    const x1 = Math.max(r.x0, r.x1)
+    const y0 = Math.min(r.y0, r.y1)
+    const y1 = Math.max(r.y0, r.y1)
+    // top-left (y down) → visual bottom-left (y up)
+    inner += `${fmt(x0)} ${fmt(visH - y1)} ${fmt(x1 - x0)} ${fmt(y1 - y0)} re f\n`
+  }
+  const ops = 'q\n' + `${cm.map(fmt).join(' ')} cm\n` + inner + 'Q\n'
+  const enc = new TextEncoder()
+  const wrapped = concatBytes([
+    enc.encode('q\n'),
+    readPageContents(pageObj),
+    enc.encode('\nQ\n'),
+    enc.encode(ops)
+  ])
+  pageObj.put('Contents', d.addStream(wrapped, {}))
 }
 
 /**
@@ -591,7 +629,10 @@ export function selectionString(
 }
 
 /** Apply a light, rectangular yellow highlight over each rect. */
-export function highlightRects(rects: RedactionRect[]): DocumentInfo {
+export function highlightRects(
+  rects: RedactionRect[],
+  color: TextColor = { r: 1, g: 1, b: 0 }
+): DocumentInfo {
   const d = requireDoc()
   if (rects.length === 0) return getInfo()
   const byPage = new Map<number, RedactionRect[]>()
@@ -600,7 +641,8 @@ export function highlightRects(rects: RedactionRect[]): DocumentInfo {
     list.push(r)
     byPage.set(r.pageIndex, list)
   }
-  operation('黄色マーカー', () => {
+  const rgb: [number, number, number] = [color.r, color.g, color.b]
+  operation('マーカー', () => {
     for (const [pageIndex, prs] of byPage) {
       const page = d.loadPage(pageIndex)
       for (const r of prs) {
@@ -608,12 +650,12 @@ export function highlightRects(rects: RedactionRect[]): DocumentInfo {
         const y0 = Math.min(r.y0, r.y1)
         const x1 = Math.max(r.x0, r.x1)
         const y1 = Math.max(r.y0, r.y1)
-        // A 'Square' annotation with a yellow interior fill gives a clean
+        // A 'Square' annotation with a coloured interior fill gives a clean
         // rectangle; 'Highlight' would render with rounded ends (oval-looking).
         const annot = page.createAnnotation('Square')
         annot.setRect([x0, y0, x1, y1])
-        annot.setInteriorColor([1, 1, 0])
-        annot.setColor([1, 1, 0])
+        annot.setInteriorColor(rgb)
+        annot.setColor(rgb)
         annot.setBorderWidth(0)
         annot.setOpacity(0.4)
         annot.update()

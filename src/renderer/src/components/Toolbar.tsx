@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SelectMode } from '@shared/types'
+import ColorApplyButton from './ColorApplyButton'
+import type { ColorChoice } from '../lib/colors'
+import { HIGHLIGHT_COLORS, REDACT_COLORS } from '../lib/colors'
 
 interface Props {
   hasDoc: boolean
@@ -16,9 +19,13 @@ interface Props {
   onOpen: () => void
   onClose: () => void
   onRedact: () => void
-  onWhiteFill: () => void
   onHighlight: () => void
   onMosaic: () => void
+  /** Selected 墨消し / マーカー colours and their setters (split-button palette). */
+  redactColor: ColorChoice
+  onRedactColor: (c: ColorChoice) => void
+  highlightColor: ColorChoice
+  onHighlightColor: (c: ColorChoice) => void
   onExpandSameWord: () => void
   canExpand: boolean
   onSearchAdd: (keyword: string) => void
@@ -95,33 +102,28 @@ export default function Toolbar(props: Props): React.JSX.Element {
 
         <span className="sep" />
 
-        <button
-          className="act act-redact"
-          onClick={props.onRedact}
-          disabled={d || pendingCount === 0}
-          title="選択した範囲の下にある文字・画像を完全に削除します"
-        >
-          <span className="act-icon">■</span>墨
-          <span className="act-count">{pendingCount}</span>
-        </button>
-        <button
-          className="act act-white"
-          onClick={props.onWhiteFill}
-          disabled={d || pendingCount === 0}
-          title="選択した範囲の下にある文字・画像を完全に削除し、白で塗りつぶします"
-        >
-          <span className="act-icon">▢</span>白
-          <span className="act-count">{pendingCount}</span>
-        </button>
-        <button
-          className="act act-highlight"
-          onClick={props.onHighlight}
-          disabled={d || pendingCount === 0}
-          title="選択した範囲に薄い黄色のマーカーを引きます（非破壊）"
-        >
-          <span className="act-icon">▥</span>黄
-          <span className="act-count">{pendingCount}</span>
-        </button>
+        <ColorApplyButton
+          label="墨消し"
+          count={pendingCount}
+          disabled={d}
+          colors={REDACT_COLORS}
+          selected={props.redactColor}
+          onSelect={props.onRedactColor}
+          onApply={props.onRedact}
+          applyClass="act act-redact"
+          title="選択した範囲の下にある文字・画像を完全に削除し、選んだ色で覆います（白＝塗らずに削除のみ）"
+        />
+        <ColorApplyButton
+          label="マーカー"
+          count={pendingCount}
+          disabled={d}
+          colors={HIGHLIGHT_COLORS}
+          selected={props.highlightColor}
+          onSelect={props.onHighlightColor}
+          onApply={props.onHighlight}
+          applyClass="act act-highlight"
+          title="選択した範囲に選んだ色の薄いマーカーを引きます（非破壊）"
+        />
         <button
           className="act act-mosaic"
           onClick={props.onMosaic}

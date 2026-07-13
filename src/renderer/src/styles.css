@@ -203,6 +203,84 @@ body {
 .toolbar button.act-text .act-count {
   background: rgba(255, 255, 255, 0.22);
 }
+
+/* 墨消し・マーカーの分割ボタン（色スウォッチ＋▾ / 適用）。 */
+.split-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+.split-btn .split-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px 6px 6px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+.split-btn .split-apply {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.split-btn .swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  display: inline-block;
+}
+.split-btn .caret {
+  font-size: 9px;
+  opacity: 0.7;
+}
+.color-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 3px;
+  z-index: 40;
+  background: var(--panel, #fff);
+  border: 1px solid var(--border, #d5d5e0);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  min-width: 140px;
+}
+.color-menu .color-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.color-menu .color-item:hover {
+  background: var(--accent-soft, #eef);
+}
+.color-menu .color-item.sel {
+  background: var(--accent-soft, #eef);
+  font-weight: 600;
+}
+.color-menu .swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  display: inline-block;
+}
+.color-menu .swatch.whiteout {
+  background:
+    linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%),
+    #fff;
+  background-size: 8px 8px;
+}
 .toolbar .spacer {
   flex: 1;
 }
