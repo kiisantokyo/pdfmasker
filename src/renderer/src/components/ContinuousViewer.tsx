@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PageInfo, RedactionRect, SelectMode } from '@shared/types'
+import type { PageInfo, RedactionRect, SelectMode, TextItem } from '@shared/types'
 import PageCanvas from './PageCanvas'
 
 interface Props {
@@ -30,15 +30,14 @@ interface Props {
     pageIndex: number,
     rect: { x0: number; y0: number; x1: number; y1: number }
   ) => void
-  /** 文字入れモード（クリックでその場に文字を挿入）。 */
+  /** 文字入れモード（クリックで編集可能なテキストを追加）。 */
   textMode?: boolean
-  defaultFontSize?: number
-  onInsertText?: (
-    pageIndex: number,
-    pagePt: { x: number; y: number },
-    text: string,
-    fontSize: number
-  ) => void
+  textItems?: TextItem[]
+  editingTextId?: number | null
+  onCreateText?: (pageIndex: number, pagePt: { x: number; y: number }) => void
+  onUpdateText?: (id: number, patch: Partial<TextItem>) => void
+  onDeleteText?: (id: number) => void
+  onEditText?: (id: number | null) => void
 }
 
 export default function ContinuousViewer({
@@ -57,8 +56,12 @@ export default function ContinuousViewer({
   regionCopyMode = false,
   onRegionCopy,
   textMode = false,
-  defaultFontSize,
-  onInsertText
+  textItems = [],
+  editingTextId = null,
+  onCreateText,
+  onUpdateText,
+  onDeleteText,
+  onEditText
 }: Props): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const wrapRefs = useRef<Array<HTMLDivElement | null>>([])
@@ -135,8 +138,12 @@ export default function ContinuousViewer({
                 regionCopyMode={regionCopyMode}
                 onRegionCopy={onRegionCopy}
                 textMode={textMode}
-                defaultFontSize={defaultFontSize}
-                onInsertText={onInsertText}
+                textItems={textItems.filter((t) => t.pageIndex === p.index)}
+                editingTextId={editingTextId}
+                onCreateText={onCreateText}
+                onUpdateText={onUpdateText}
+                onDeleteText={onDeleteText}
+                onEditText={onEditText}
               />
             ) : (
               <div className="cv-placeholder" style={{ height: h }} />

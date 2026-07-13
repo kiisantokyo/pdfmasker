@@ -426,6 +426,10 @@ function registerIpc(): void {
     pdf.insertTextBox(opts)
   )
 
+  ipcMain.handle(IPC.insertTexts, (_e, items: TextBoxOptions[]) =>
+    pdf.insertTextBoxes(items)
+  )
+
   ipcMain.handle(
     IPC.fontContextAt,
     (_e, pageIndex: number, x: number, y: number) =>

@@ -17,10 +17,12 @@ import type {
   SelectMode,
   StampKind,
   StampPosition,
-  TermCount
+  TermCount,
+  TextItem
 } from '@shared/types'
 import { DEFAULT_NAME_OPTIONS, STAMP_LABELS } from '@shared/types'
 import { pdfApi } from './lib/api'
+import { TEXT_LINE_HEIGHT, textAscentPt } from './lib/textMetrics'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
 import ContinuousViewer from './components/ContinuousViewer'
@@ -127,9 +129,13 @@ export default function App(): React.JSX.Element {
   const [reasons, setReasons] = useState<Record<string, string>>({})
   // 範囲を選んでクリップボードにコピー（ワンショット）。true の間だけ十字ドラッグ。
   const [copyRegion, setCopyRegion] = useState(false)
-  // 文字入れモード（クリックでその場に文字を挿入）。直前に使ったサイズを既定に引き継ぐ。
+  // 文字入れ（クリックで編集可能なテキストを追加→「文字(N)」で一括適用）。
+  // 直前に使ったサイズを既定に引き継ぐ。items は焼き込み前の編集可能オーバーレイ。
   const [textMode, setTextMode] = useState(false)
   const [lastFontSize, setLastFontSize] = useState(10.5)
+  const [textItems, setTextItems] = useState<TextItem[]>([])
+  const [editingTextId, setEditingTextId] = useState<number | null>(null)
+  const textIdRef = useRef(1)
   // 隠し文字（透明テキスト）モーダル
   const [hiddenReport, setHiddenReport] = useState<HiddenTextReport | null>(null)
   // 開いたファイルに隠し文字があった件数（警告バナー用。null=警告なし）
@@ -279,6 +285,8 @@ export default function App(): React.JSX.Element {
       setDoc(info)
       setCurrentPage(0)
       setPending([])
+      setTextItems([])
+      setEditingTextId(null)
       setDirty(false)
       setRefreshKey((k) => k + 1)
       resetHist()
@@ -626,30 +634,73 @@ export default function App(): React.JSX.Element {
       setStatus(`スタンプ「${STAMP_LABELS[stampKind]}」を押しました。`)
     }, 'スタンプの付与')
 
-  // 文字入れ: burn a draft text box into the page as real embedded text. This is
-  // a content-only change (like スタンプ), so pending marks are kept across undo.
-  const insertText = (
+  // 文字入れ: create/edit/move/delete editable text boxes (not yet burned), then
+  // apply them all at once. A new box copies the size of the text under the click.
+  const createText = (
     pageIndex: number,
-    pt: { x: number; y: number },
-    text: string,
-    fontSize: number
+    pt: { x: number; y: number }
   ): Promise<void> =>
     run(async () => {
-      if (!doc || !text.trim()) return
+      let fontSize = lastFontSize
+      try {
+        const ctx = await pdfApi.fontContextAt(pageIndex, pt.x, pt.y)
+        if (ctx.fontSize) fontSize = ctx.fontSize
+      } catch {
+        // no nearby text — keep the last-used size
+      }
+      const id = textIdRef.current++
+      setTextItems((items) => [
+        ...items,
+        { id, pageIndex, x: pt.x, y: pt.y, text: '', fontSize }
+      ])
+      setEditingTextId(id)
+    }, '文字ボックスの追加')
+
+  const updateText = (id: number, patch: Partial<TextItem>): void => {
+    setTextItems((items) =>
+      items.map((t) => (t.id === id ? { ...t, ...patch } : t))
+    )
+    if (patch.fontSize != null) setLastFontSize(patch.fontSize)
+  }
+
+  const deleteText = (id: number): void => {
+    setTextItems((items) => items.filter((t) => t.id !== id))
+    setEditingTextId((cur) => (cur === id ? null : cur))
+  }
+
+  /** Drop all unapplied text boxes (used when page indices/geometry shift). */
+  const dropTextItems = (): void => {
+    setTextItems([])
+    setEditingTextId(null)
+  }
+
+  // Burn every text box into the PDF in one undoable step (content-only change,
+  // so pending redaction marks are kept). ascent/lineHeight come from the SAME
+  // metrics the on-page editor uses, so the result lands where it was shown.
+  const applyTextItems = (): Promise<void> =>
+    run(async () => {
+      if (!doc) return
+      const items = textItems.filter((t) => t.text.trim())
+      if (items.length === 0) return
       const cur = pending
-      const info = await pdfApi.insertText({
-        pageIndex,
-        x: pt.x,
-        y: pt.y,
-        text,
-        fontSize
-      })
+      const info = await pdfApi.insertTexts(
+        items.map((t) => ({
+          pageIndex: t.pageIndex,
+          x: t.x,
+          y: t.y,
+          text: t.text,
+          fontSize: t.fontSize,
+          ascentPt: textAscentPt(t.fontSize),
+          lineHeightPt: TEXT_LINE_HEIGHT * t.fontSize
+        }))
+      )
       pushHist(true, cur, cur)
       setDoc(info)
-      setLastFontSize(fontSize)
+      setTextItems([])
+      setEditingTextId(null)
       setDirty(true)
       setRefreshKey((k) => k + 1)
-      setStatus('文字を挿入しました（元に戻すで取消可）。')
+      setStatus(`文字を ${items.length} 件挿入しました（元に戻すで取消可）。`)
     }, '文字の挿入')
 
   const bulkDelete = (indices: number[]): Promise<void> =>
@@ -659,6 +710,7 @@ export default function App(): React.JSX.Element {
       pushHist(true, pending, [])
       setDoc(info)
       setPending([]) // page indices shift after deletion
+      dropTextItems() // unapplied text is page-anchored; indices shifted
       setCurrentPage((c) => Math.min(c, info.pageCount - 1))
       setDirty(true)
       setRefreshKey((k) => k + 1)
@@ -674,6 +726,8 @@ export default function App(): React.JSX.Element {
       pushHist(true, pending, next)
       setDoc(info)
       setPending(next)
+      setTextItems((items) => items.filter((t) => !set.has(t.pageIndex)))
+      setEditingTextId(null)
       setDirty(true)
       setRefreshKey((k) => k + 1)
       setStatus(`${indices.length} ページを回転しました。`)
@@ -688,6 +742,7 @@ export default function App(): React.JSX.Element {
       pushHist(true, pending, [])
       setDoc(info)
       setPending([])
+      dropTextItems()
       // Follow the moved page to its new position so focus stays on it.
       navigateTo(to)
       setDirty(true)
@@ -703,6 +758,7 @@ export default function App(): React.JSX.Element {
       pushHist(true, pending, [])
       setDoc(info)
       setPending([]) // page indices shift after reordering
+      dropTextItems()
       setDirty(true)
       setRefreshKey((k) => k + 1)
       setStatus(`${indices.length} ページを移動しました。`)
@@ -736,6 +792,7 @@ export default function App(): React.JSX.Element {
       await pdfApi.closeDoc()
       setDoc(null)
       setPending([])
+      dropTextItems()
       resetHist()
       setDirty(false)
       setCurrentPage(0)
@@ -751,7 +808,7 @@ export default function App(): React.JSX.Element {
     }, '閉じる')
 
   const closeFile = (): void => {
-    if (dirty || pending.length > 0) setCloseConfirm(true)
+    if (dirty || pending.length > 0 || textItems.length > 0) setCloseConfirm(true)
     else void doCloseFile()
   }
 
@@ -907,6 +964,8 @@ export default function App(): React.JSX.Element {
       pushHist(true, pending, nextPending)
       setDoc(info)
       setPending(nextPending)
+      setTextItems((items) => items.filter((t) => !trimmed.has(t.pageIndex)))
+      setEditingTextId(null)
       setDirty(true)
       setTrimOpen(false)
       setRefreshKey((k) => k + 1)
@@ -1099,9 +1158,10 @@ export default function App(): React.JSX.Element {
   )
 
   // Keep the main process informed of unsaved work so it can warn on close.
+  // Unapplied text boxes count as unsaved work too.
   useEffect(() => {
-    pdfApi.setUnsaved(dirty || pending.length > 0)
-  }, [dirty, pending])
+    pdfApi.setUnsaved(dirty || pending.length > 0 || textItems.length > 0)
+  }, [dirty, pending, textItems])
 
   // Ctrl+Z / Ctrl+Y (and Ctrl+Shift+Z) for undo/redo.
   useEffect(() => {
@@ -2446,7 +2506,10 @@ export default function App(): React.JSX.Element {
         onToggleTextMode={() => {
           setCopyRegion(false)
           setTextMode((v) => !v)
+          setEditingTextId(null)
         }}
+        textCount={textItems.length}
+        onApplyText={applyTextItems}
         onResizePage={() => setResizeOpen(true)}
         onClearMetadata={openProperties}
         onDeletePage={deletePage}
@@ -2477,8 +2540,10 @@ export default function App(): React.JSX.Element {
       {textMode && (
         <div className="region-hint" role="status">
           <span>
-            文字を書き込みたい位置を<b>クリック</b> → 入力（確定 Ctrl+Enter・
-            微調整 Alt+矢印）。周囲の文字サイズに自動で合わせます。
+            書き込みたい位置を<b>クリック</b>して入力。<b>✥</b>でドラッグ移動・
+            Alt+矢印で微調整・周囲のサイズに自動追従。仕上げにツールバーの
+            <b>「文字{textItems.length > 0 ? `(${textItems.length})` : ''}」</b>
+            でPDFに確定します。
           </span>
           <button className="region-hint-cancel" onClick={() => setTextMode(false)}>
             終了（Esc）
@@ -2555,8 +2620,12 @@ export default function App(): React.JSX.Element {
             regionCopyMode={copyRegion}
             onRegionCopy={onRegionCopy}
             textMode={textMode}
-            defaultFontSize={lastFontSize}
-            onInsertText={insertText}
+            textItems={textItems}
+            editingTextId={editingTextId}
+            onCreateText={createText}
+            onUpdateText={updateText}
+            onDeleteText={deleteText}
+            onEditText={setEditingTextId}
           />
         ) : (
           <main className="viewer">

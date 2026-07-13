@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RedactionRect, SelectMode } from '@shared/types'
+import type { RedactionRect, SelectMode, TextItem } from '@shared/types'
 import { pdfApi } from '../lib/api'
+import { JP_FONT_STACK, TEXT_LINE_HEIGHT } from '../lib/textMetrics'
 
 interface Props {
   pageIndex: number
@@ -38,18 +39,20 @@ interface Props {
     rect: { x0: number; y0: number; x1: number; y1: number }
   ) => void
   /**
-   * 文字入れモード: a click opens an inline draft editor at that spot; on commit
-   * the text is burned into the page as real embedded text.
+   * 文字入れモード: a click on empty space creates a new editable text box; the
+   * boxes stay editable/movable overlays (WYSIWYG) until the user applies them.
    */
   textMode?: boolean
-  /** Fallback font size (pt) when no nearby text is detected to copy. */
-  defaultFontSize?: number
-  onInsertText?: (
-    pageIndex: number,
-    pagePt: { x: number; y: number },
-    text: string,
-    fontSize: number
-  ) => void
+  /** Editable (not-yet-burned) text boxes belonging to THIS page. */
+  textItems?: TextItem[]
+  /** Which text box is currently being edited (focuses its textarea). */
+  editingTextId?: number | null
+  /** Create a new empty text box at a page-space point (parent seeds its size). */
+  onCreateText?: (pageIndex: number, pagePt: { x: number; y: number }) => void
+  onUpdateText?: (id: number, patch: Partial<TextItem>) => void
+  onDeleteText?: (id: number) => void
+  /** Report which box is being edited (id) or that editing ended (null). */
+  onEditText?: (id: number | null) => void
 }
 
 interface DragState {
@@ -59,12 +62,11 @@ interface DragState {
   y1: number
 }
 
-/** In-progress text box: position in canvas px (top-left), size in points. */
-interface TextDraft {
-  x: number
-  y: number
-  text: string
-  size: number
+/** While dragging a text box by its handle: which box + pointer→box offset (px). */
+interface MoveState {
+  id: number
+  offX: number
+  offY: number
 }
 
 export default function PageCanvas({
@@ -81,8 +83,12 @@ export default function PageCanvas({
   regionCopyMode = false,
   onRegionCopy,
   textMode = false,
-  defaultFontSize = 10.5,
-  onInsertText
+  textItems = [],
+  editingTextId = null,
+  onCreateText,
+  onUpdateText,
+  onDeleteText,
+  onEditText
 }: Props): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -93,13 +99,9 @@ export default function PageCanvas({
   // Live preview of the text selection (page-space rects) while dragging.
   const [textPreview, setTextPreview] = useState<RedactionRect[]>([])
   const [loading, setLoading] = useState(true)
-  // 文字入れ: the draft text box currently being composed (null = none).
-  const [draft, setDraft] = useState<TextDraft | null>(null)
-  const draftRef = useRef<TextDraft | null>(null)
-  const taRef = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    draftRef.current = draft
-  }, [draft])
+  // 文字入れ: pointer-drag state while moving a text box by its handle.
+  const [move, setMove] = useState<MoveState | null>(null)
+  const editRef = useRef<HTMLTextAreaElement | null>(null)
 
   // Fetch + decode the page render whenever page/zoom/refresh changes.
   useEffect(() => {
@@ -216,40 +218,10 @@ export default function PageCanvas({
     }
   }
 
-  // Burn the current draft (if any non-empty text) and clear it.
-  const commitDraft = useCallback(() => {
-    const dr = draftRef.current
-    draftRef.current = null
-    setDraft(null)
-    if (dr && dr.text.trim() && onInsertText) {
-      onInsertText(pageIndex, { x: dr.x / zoom, y: dr.y / zoom }, dr.text, dr.size)
-    }
-  }, [pageIndex, zoom, onInsertText])
-
-  // Open a fresh draft at a canvas point, seeding its size from nearby text.
-  const openDraft = useCallback(
-    async (canvasX: number, canvasY: number) => {
-      let s = defaultFontSize
-      try {
-        const ctx = await pdfApi.fontContextAt(pageIndex, canvasX / zoom, canvasY / zoom)
-        if (ctx.fontSize) s = ctx.fontSize
-      } catch {
-        // no context available — keep the fallback size
-      }
-      setDraft({ x: canvasX, y: canvasY, text: '', size: s })
-    },
-    [pageIndex, zoom, defaultFontSize]
-  )
-
-  // Focus the textarea whenever a new draft appears.
+  // Focus the textarea of whichever box is being edited.
   useEffect(() => {
-    if (draft) taRef.current?.focus()
-  }, [draft?.x, draft?.y])
-
-  // Leaving 文字入れ mode commits whatever is being typed.
-  useEffect(() => {
-    if (!textMode && draftRef.current) commitDraft()
-  }, [textMode, commitDraft])
+    if (editingTextId != null) editRef.current?.focus()
+  }, [editingTextId])
 
   const onPointerUp = async (e: React.PointerEvent): Promise<void> => {
     if (!drag) return
@@ -257,13 +229,12 @@ export default function PageCanvas({
     const dy = Math.abs(drag.y1 - drag.y0)
     const isClick = dx <= 4 && dy <= 4
 
-    // 文字入れ: a click places a new text box (committing any current draft).
+    // 文字入れ: a click on empty page space creates a new text box there.
     if (textMode) {
       setDrag(null)
       setTextPreview([])
-      if (isClick) {
-        if (draftRef.current) commitDraft()
-        void openDraft(drag.x0, drag.y0)
+      if (isClick && onCreateText) {
+        onCreateText(pageIndex, { x: drag.x0 / zoom, y: drag.y0 / zoom })
       }
       return
     }
@@ -317,40 +288,74 @@ export default function PageCanvas({
     setTextPreview([])
   }
 
-  const nudge = (dx: number, dy: number): void =>
-    setDraft((d) => (d ? { ...d, x: d.x + dx * zoom, y: d.y + dy * zoom } : d))
-
-  const setDraftSize = (delta: number): void => {
-    setDraft((d) =>
-      d ? { ...d, size: Math.max(4, Math.round((d.size + delta) * 2) / 2) } : d
-    )
-    taRef.current?.focus()
+  // Grow a text box's <textarea> to fit its content (no wrapping, so the overlay
+  // matches the non-wrapping burned text).
+  const autoGrow = (el: HTMLTextAreaElement): void => {
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+    el.style.width = 'auto'
+    el.style.width = `${el.scrollWidth + 2}px`
   }
 
-  const onDraftKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      draftRef.current = null
-      setDraft(null)
-      return
+  // Drag a text box by its handle: track pointer globally until release.
+  useEffect(() => {
+    if (!move) return
+    const el = canvasRef.current
+    const onMove = (e: PointerEvent): void => {
+      if (!el) return
+      const r = el.getBoundingClientRect()
+      const nx = (e.clientX - r.left - move.offX) / zoom
+      const ny = (e.clientY - r.top - move.offY) / zoom
+      onUpdateText?.(move.id, { x: Math.max(0, nx), y: Math.max(0, ny) })
     }
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    const onUp = (): void => setMove(null)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [move, zoom, onUpdateText])
+
+  const startMove = (e: React.PointerEvent, item: TextItem): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    const r = canvasRef.current!.getBoundingClientRect()
+    setMove({
+      id: item.id,
+      offX: e.clientX - r.left - item.x * zoom,
+      offY: e.clientY - r.top - item.y * zoom
+    })
+  }
+
+  const changeSize = (item: TextItem, delta: number): void => {
+    const next = Math.max(4, Math.round((item.fontSize + delta) * 2) / 2)
+    onUpdateText?.(item.id, { fontSize: next })
+    editRef.current?.focus()
+  }
+
+  const onItemKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+    item: TextItem
+  ): void => {
+    if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) {
       e.preventDefault()
-      commitDraft()
+      e.stopPropagation()
+      e.currentTarget.blur()
       return
     }
     if (e.altKey && e.key.startsWith('Arrow')) {
-      // Nudge the box: 1pt, or 0.25pt with Shift, for pixel-precise placement.
+      // Nudge the box: 1pt, or 0.25pt with Shift, for precise placement.
       e.preventDefault()
       const s = e.shiftKey ? 0.25 : 1
-      if (e.key === 'ArrowLeft') nudge(-s, 0)
-      else if (e.key === 'ArrowRight') nudge(s, 0)
-      else if (e.key === 'ArrowUp') nudge(0, -s)
-      else if (e.key === 'ArrowDown') nudge(0, s)
+      const dx = e.key === 'ArrowLeft' ? -s : e.key === 'ArrowRight' ? s : 0
+      const dy = e.key === 'ArrowUp' ? -s : e.key === 'ArrowDown' ? s : 0
+      onUpdateText?.(item.id, {
+        x: Math.max(0, item.x + dx),
+        y: Math.max(0, item.y + dy)
+      })
     }
   }
-
-  const keepFocus = (e: React.MouseEvent): void => e.preventDefault()
 
   return (
     <div className="canvas-wrap" ref={wrapRef}>
@@ -373,63 +378,87 @@ export default function PageCanvas({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       />
-      {draft && (
-        <div
-          className="text-draft"
-          style={{ left: draft.x, top: draft.y }}
-        >
-          <div className="text-draft-tools" onMouseDown={keepFocus}>
-            <button type="button" title="小さく" onClick={() => setDraftSize(-0.5)}>
-              A−
-            </button>
-            <span className="text-draft-size">{draft.size}pt</span>
-            <button type="button" title="大きく" onClick={() => setDraftSize(0.5)}>
-              A＋
-            </button>
-            <span className="text-draft-sep" />
-            <button
-              type="button"
-              className="text-draft-ok"
-              title="確定（Ctrl+Enter）"
-              onClick={commitDraft}
-            >
-              ✓
-            </button>
-            <button
-              type="button"
-              className="text-draft-cancel"
-              title="取消（Esc）"
-              onClick={() => {
-                draftRef.current = null
-                setDraft(null)
+
+      {/* 文字入れ: editable WYSIWYG text boxes (shown always; interactive only in
+          文字入れ mode). Each box's overlay defines exactly where it will burn. */}
+      {textItems.map((item) => {
+        const editing = textMode && editingTextId === item.id
+        return (
+          <div
+            key={item.id}
+            className={
+              'text-item' +
+              (textMode ? ' interactive' : '') +
+              (editing ? ' editing' : '')
+            }
+            style={{ left: item.x * zoom, top: item.y * zoom }}
+          >
+            {editing && (
+              <div
+                className="text-item-tools"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <button type="button" title="小さく" onClick={() => changeSize(item, -0.5)}>
+                  A−
+                </button>
+                <span className="text-item-size">{item.fontSize}pt</span>
+                <button type="button" title="大きく" onClick={() => changeSize(item, 0.5)}>
+                  A＋
+                </button>
+                <span className="text-item-sep" />
+                <button
+                  type="button"
+                  className="text-item-del"
+                  title="このテキストを削除"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onDeleteText?.(item.id)}
+                >
+                  🗑
+                </button>
+              </div>
+            )}
+            {textMode && (
+              <span
+                className="text-item-handle"
+                title="ドラッグで移動"
+                onPointerDown={(e) => startMove(e, item)}
+              >
+                ✥
+              </span>
+            )}
+            <textarea
+              ref={(el) => {
+                if (editing) editRef.current = el
+                if (el) autoGrow(el) // keep every box sized to its content
               }}
-            >
-              ✕
-            </button>
+              className="text-item-input"
+              value={item.text}
+              spellCheck={false}
+              rows={1}
+              readOnly={!textMode}
+              placeholder={editing ? '文字を入力' : ''}
+              style={{
+                fontSize: item.fontSize * zoom,
+                lineHeight: TEXT_LINE_HEIGHT,
+                fontFamily: JP_FONT_STACK
+              }}
+              onFocus={(e) => {
+                onEditText?.(item.id)
+                autoGrow(e.currentTarget)
+              }}
+              onChange={(e) => {
+                onUpdateText?.(item.id, { text: e.target.value })
+                autoGrow(e.target)
+              }}
+              onKeyDown={(e) => onItemKeyDown(e, item)}
+              onBlur={(e) => {
+                if (!e.currentTarget.value.trim()) onDeleteText?.(item.id)
+                onEditText?.(null)
+              }}
+            />
           </div>
-          <textarea
-            ref={taRef}
-            className="text-draft-input"
-            value={draft.text}
-            spellCheck={false}
-            rows={1}
-            style={{
-              fontSize: draft.size * zoom,
-              lineHeight: 1.35
-            }}
-            onChange={(e) => {
-              const text = e.target.value
-              setDraft((d) => (d ? { ...d, text } : d))
-              // Auto-grow height to fit the content.
-              const el = e.target
-              el.style.height = 'auto'
-              el.style.height = `${el.scrollHeight}px`
-            }}
-            onKeyDown={onDraftKeyDown}
-            onBlur={commitDraft}
-          />
-        </div>
-      )}
+        )
+      })}
     </div>
   )
 }

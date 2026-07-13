@@ -32,6 +32,9 @@ interface Props {
   onStamp: () => void
   textMode: boolean
   onToggleTextMode: () => void
+  /** Count of not-yet-applied text boxes; enables the 「文字(N)」 apply button. */
+  textCount: number
+  onApplyText: () => void
   onResizePage: () => void
   onClearMetadata: () => void
   onDeletePage: () => void
@@ -257,9 +260,18 @@ export default function Toolbar(props: Props): React.JSX.Element {
           className={props.textMode ? 'active' : ''}
           onClick={props.onToggleTextMode}
           disabled={d}
-          title="クリックした位置に文字を書き込みます（フォームの記入・注記など）"
+          title="クリックした位置に文字を書き込みます（フォームの記入・注記など）。適用するまで自由に編集・移動できます"
         >
           ✏️ 文字入れ
+        </button>
+
+        <button
+          className="act act-text"
+          onClick={props.onApplyText}
+          disabled={d || props.textCount === 0}
+          title="書き込んだ文字をPDFに確定します（元に戻すで取消可）"
+        >
+          文字<span className="act-count">{props.textCount}</span>
         </button>
 
         <span className="sep" />

@@ -191,6 +191,18 @@ body {
 .toolbar button.act-mosaic .act-count {
   background: rgba(0, 0, 0, 0.28);
 }
+.toolbar button.act-text {
+  background: #2563eb;
+  color: #fff;
+  border-color: #1d4fd7;
+}
+.toolbar button.act-text:hover:not(:disabled) {
+  background: #1d4fd7;
+  border-color: #1a44b8;
+}
+.toolbar button.act-text .act-count {
+  background: rgba(255, 255, 255, 0.22);
+}
 .toolbar .spacer {
   flex: 1;
 }
@@ -532,35 +544,66 @@ body {
   cursor: text;
 }
 
-/* 文字入れ: inline draft editor overlaid on the page canvas. The dashed frame is
-   only an editing affordance — nothing is drawn into the PDF but the text. */
-.text-draft {
+/* 文字入れ: editable WYSIWYG text boxes overlaid on the page canvas. The box IS
+   where the text will burn — no offset. Overlays are inert outside 文字入れ mode
+   so redaction selection passes through them. */
+.text-item {
   position: absolute;
   z-index: 20;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  transform: translateY(-2px);
+  pointer-events: none; /* inert until interactive (文字入れ mode) */
 }
-.text-draft-input {
+.text-item.interactive {
+  pointer-events: auto;
+}
+.text-item-input {
+  display: block;
   margin: 0;
-  padding: 0 1px;
-  border: 1px dashed rgba(37, 99, 235, 0.9);
-  background: rgba(255, 255, 255, 0.55);
+  padding: 0;
+  border: none;
+  background: transparent;
   color: #1a1a1a;
-  font-family: inherit;
-  min-width: 3ch;
-  min-height: 1.2em;
+  min-width: 1ch;
   resize: none;
   overflow: hidden;
   white-space: pre;
   outline: none;
 }
-.text-draft-tools {
+.text-item.interactive .text-item-input {
+  /* Faint guide so an empty/!focused box is findable; not burned into the PDF. */
+  outline: 1px dashed rgba(37, 99, 235, 0.55);
+  background: rgba(255, 255, 255, 0.35);
+}
+.text-item.editing .text-item-input {
+  outline: 1.5px solid rgba(37, 99, 235, 0.9);
+  background: rgba(255, 255, 255, 0.6);
+}
+/* Drag handle (move) sits just outside the top-left corner. */
+.text-item-handle {
+  position: absolute;
+  left: -16px;
+  top: -16px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 11px;
+  cursor: move;
+  user-select: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+/* Floating edit toolbar above the box. */
+.text-item-tools {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 4px;
   display: flex;
   align-items: center;
   gap: 2px;
-  margin-bottom: 3px;
   padding: 2px 4px;
   border-radius: 6px;
   background: #1f2937;
@@ -569,7 +612,7 @@ body {
   font-size: 12px;
   white-space: nowrap;
 }
-.text-draft-tools button {
+.text-item-tools button {
   min-width: 22px;
   padding: 2px 5px;
   border: none;
@@ -580,21 +623,18 @@ body {
   font-size: 12px;
   line-height: 1.2;
 }
-.text-draft-tools button:hover {
+.text-item-tools button:hover {
   background: #4b5563;
 }
-.text-draft-tools .text-draft-ok {
-  background: #2563eb;
-}
-.text-draft-tools .text-draft-cancel {
+.text-item-tools .text-item-del {
   background: #6b7280;
 }
-.text-draft-size {
+.text-item-size {
   min-width: 34px;
   text-align: center;
   opacity: 0.9;
 }
-.text-draft-sep {
+.text-item-sep {
   width: 1px;
   height: 14px;
   margin: 0 3px;

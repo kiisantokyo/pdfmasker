@@ -163,6 +163,9 @@ const api = {
   /** Burn a text box into a page as real embedded (selectable) text. */
   insertText: (opts: TextBoxOptions): Promise<DocumentInfo> =>
     ipcRenderer.invoke(IPC.insertText, opts),
+  /** Burn several text boxes in one undoable step (used by 文字入れ apply). */
+  insertTexts: (items: TextBoxOptions[]): Promise<DocumentInfo> =>
+    ipcRenderer.invoke(IPC.insertTexts, items),
   /** Sample the nearest existing text's size (pt) to seed the editor default. */
   fontContextAt: (
     pageIndex: number,

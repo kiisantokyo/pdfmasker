@@ -236,6 +236,31 @@ export interface TextBoxOptions {
   fontSize: number
   /** Text colour (defaults to near-black 0.1). */
   color?: TextColor
+  /**
+   * Distance (pt) from the text's top (opts.y) down to the first baseline. The
+   * renderer measures this from the SAME font metrics its on-page editor uses, so
+   * the burned text lands exactly where the editable overlay showed it. Defaults
+   * to fontSize*0.8 when omitted.
+   */
+  ascentPt?: number
+  /** Baseline-to-baseline distance (pt) for multi-line text. Defaults to fontSize*1.35. */
+  lineHeightPt?: number
+}
+
+/**
+ * An editable, not-yet-burned text box living in the renderer (the 文字入れ
+ * equivalent of a pending redaction). It is shown as a WYSIWYG overlay on the
+ * page and only burned into the PDF when the user applies it.
+ */
+export interface TextItem {
+  /** Client-side id (stable across edits). */
+  id: number
+  pageIndex: number
+  /** Top-left corner in page points (top-left origin), matching redaction rects. */
+  x: number
+  y: number
+  text: string
+  fontSize: number
 }
 
 /**
@@ -360,6 +385,7 @@ export const IPC = {
   addPageNumbers: 'pdf:addPageNumbers',
   addStamp: 'pdf:addStamp',
   insertText: 'pdf:insertText',
+  insertTexts: 'pdf:insertTexts',
   fontContextAt: 'pdf:fontContextAt',
   undo: 'pdf:undo',
   redo: 'pdf:redo',

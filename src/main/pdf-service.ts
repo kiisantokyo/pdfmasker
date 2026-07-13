@@ -2169,62 +2169,90 @@ export function fontContextAt(
   return { fontSize: null }
 }
 
-/**
- * Burn a text box into a page as real, selectable/searchable text: the Japanese
- * font is embedded as an Identity CIDFont (subset on save), so glyphs render and
- * round-trip through extraction. No border or background is drawn (a deliberate
- * default — the common "form fill" case wants clean text). One journal op = one
- * undo. Placed via pageVisualMatrix so it stays upright on /Rotate pages.
- */
-export function insertTextBox(opts: TextBoxOptions): DocumentInfo {
-  const d = requireDoc()
-  const raw = (opts.text ?? '').replace(/\r\n?/g, '\n')
-  if (!raw.trim()) return getInfo()
-  const font = requireJpFont()
+/** Build the `BT … ET` text-drawing body for one text box, in the page's visual
+ *  bottom-left space (caller wraps it with the pageVisualMatrix `cm`). */
+function textItemBody(
+  font: mupdf.Font,
+  opts: TextBoxOptions,
+  visH: number
+): string {
   const size = Math.max(1, opts.fontSize)
   const col = opts.color ?? { r: 0.1, g: 0.1, b: 0.1 }
-  const lines = raw.split('\n')
-  const leading = size * 1.35 // line-to-line baseline distance
-  // Approximate ascent: place the text's visual top at opts.y (CJK caps sit
-  // ~0.88em above baseline; 0.8 reads well without clipping).
-  const ascent = size * 0.8
+  const lines = (opts.text ?? '').replace(/\r\n?/g, '\n').split('\n')
+  // ascent = top→baseline; leading = baseline→baseline. Both come from the
+  // renderer's editor metrics (see TextBoxOptions) so the burn matches the
+  // on-page overlay exactly; fall back to reasonable ratios when absent.
+  const ascent = opts.ascentPt ?? size * 0.8
+  const leading = opts.lineHeightPt ?? size * 1.35
+  const bx = opts.x
+  const byTop = visH - (opts.y + ascent)
+
+  let body = 'BT\n' + `/PMTEXT ${fmt(size)} Tf\n`
+  body += `${fmt(col.r)} ${fmt(col.g)} ${fmt(col.b)} rg\n`
+  body += `${fmt(-leading)} TL\n`
+  body += `${fmt(bx)} ${fmt(byTop)} Td\n`
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) body += 'T*\n'
+    body += `<${hexCids(font, lines[i])}> Tj\n`
+  }
+  body += 'ET\n'
+  return body
+}
+
+/**
+ * Burn one or more text boxes into their pages as real, selectable/searchable
+ * text: the Japanese font is embedded as an Identity CIDFont (subset on save),
+ * so glyphs render and round-trip through extraction. No border/background is
+ * drawn (a deliberate default — the common "form fill" case wants clean text).
+ * All boxes are applied in ONE journal operation (= one undo). Placed via
+ * pageVisualMatrix so text stays upright on /Rotate pages.
+ */
+export function insertTextBoxes(items: TextBoxOptions[]): DocumentInfo {
+  const d = requireDoc()
+  const valid = items.filter((it) => (it.text ?? '').trim())
+  if (valid.length === 0) return getInfo()
+  const font = requireJpFont()
   const enc = new TextEncoder()
 
+  // Group by page so each page's content stream is rewritten once.
+  const byPage = new Map<number, TextBoxOptions[]>()
+  for (const it of valid) {
+    const arr = byPage.get(it.pageIndex)
+    if (arr) arr.push(it)
+    else byPage.set(it.pageIndex, [it])
+  }
+
   operation('文字の挿入', () => {
-    const fontRef = d.addFont(font)
-    const page = d.loadPage(opts.pageIndex)
-    const pageObj = page.getObject()
-    const [llx, lly, urx, ury] = mediaBox(page)
-    const w = urx - llx
-    const h = ury - lly
-    if (w <= 0 || h <= 0) return
-    const { cm, visH } = pageVisualMatrix(readRotation(page), llx, lly, w, h)
+    for (const [pageIndex, its] of byPage) {
+      const page = d.loadPage(pageIndex)
+      const pageObj = page.getObject()
+      const [llx, lly, urx, ury] = mediaBox(page)
+      const w = urx - llx
+      const h = ury - lly
+      if (w <= 0 || h <= 0) continue
+      const { cm, visH } = pageVisualMatrix(readRotation(page), llx, lly, w, h)
 
-    // First baseline in visual bottom-left space (y up).
-    const bx = opts.x
-    const byTop = visH - (opts.y + ascent)
+      const fontRef = d.addFont(font)
+      let inner = ''
+      for (const it of its) inner += textItemBody(font, it, visH)
+      const ops = 'q\n' + `${cm.map(fmt).join(' ')} cm\n` + inner + 'Q\n'
 
-    let body = 'BT\n' + `/PMTEXT ${fmt(size)} Tf\n`
-    body += `${fmt(col.r)} ${fmt(col.g)} ${fmt(col.b)} rg\n`
-    body += `${fmt(-leading)} TL\n`
-    body += `${fmt(bx)} ${fmt(byTop)} Td\n`
-    for (let i = 0; i < lines.length; i++) {
-      if (i > 0) body += 'T*\n'
-      body += `<${hexCids(font, lines[i])}> Tj\n`
+      ownSubDict(d, ownResources(d, pageObj), 'Font').put('PMTEXT', fontRef)
+      const wrapped = concatBytes([
+        enc.encode('q\n'),
+        readPageContents(pageObj),
+        enc.encode('\nQ\n'),
+        enc.encode(ops)
+      ])
+      pageObj.put('Contents', d.addStream(wrapped, {}))
     }
-    body += 'ET\n'
-
-    const ops = 'q\n' + `${cm.map(fmt).join(' ')} cm\n` + body + 'Q\n'
-    ownSubDict(d, ownResources(d, pageObj), 'Font').put('PMTEXT', fontRef)
-    const wrapped = concatBytes([
-      enc.encode('q\n'),
-      readPageContents(pageObj),
-      enc.encode('\nQ\n'),
-      enc.encode(ops)
-    ])
-    pageObj.put('Contents', d.addStream(wrapped, {}))
   })
   return getInfo()
+}
+
+/** Convenience: burn a single text box (one undo). */
+export function insertTextBox(opts: TextBoxOptions): DocumentInfo {
+  return insertTextBoxes([opts])
 }
 
 /**
