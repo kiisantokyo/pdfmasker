@@ -584,11 +584,11 @@ function registerIpc(): void {
  */
 async function loadJpFont(): Promise<void> {
   const bundled = app.isPackaged
-    ? join(process.resourcesPath, 'fonts', 'pmtext-jp.otf')
-    : join(import.meta.dirname, '../..', 'resources', 'fonts', 'pmtext-jp.otf')
+    ? join(process.resourcesPath, 'fonts', 'pmtext-jp.ttf')
+    : join(import.meta.dirname, '../..', 'resources', 'fonts', 'pmtext-jp.ttf')
   const candidates = [bundled]
   if (!app.isPackaged && process.platform === 'win32') {
-    // Dev-only fallback (not redistributable — never bundled).
+    // Last-resort dev fallback if the bundled font is missing (not redistributed).
     candidates.push('C:/Windows/Fonts/BIZ-UDGothicR.ttc')
   }
   for (const path of candidates) {
