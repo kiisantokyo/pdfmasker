@@ -269,7 +269,7 @@ export default function Toolbar(props: Props): React.JSX.Element {
           className="act act-text"
           onClick={props.onApplyText}
           disabled={d || props.textCount === 0}
-          title="書き込んだ文字をPDFに確定します（元に戻すで取消可）"
+          title="書き込んだ文字を本物の文字としてPDFに反映します（画像化ではありません。元に戻すで取消可）"
         >
           文字<span className="act-count">{props.textCount}</span>
         </button>

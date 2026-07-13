@@ -2547,7 +2547,7 @@ export default function App(): React.JSX.Element {
             書き込みたい位置を<b>クリック</b>して入力。<b>✥</b>でドラッグ移動・
             Alt+矢印で微調整・周囲のサイズに自動追従。仕上げにツールバーの
             <b>「文字{textItems.length > 0 ? `(${textItems.length})` : ''}」</b>
-            でPDFに確定します。
+            でPDFに書き込みます。
           </span>
           <button className="region-hint-cancel" onClick={() => setTextMode(false)}>
             終了（Esc）

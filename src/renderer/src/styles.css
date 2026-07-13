@@ -626,8 +626,28 @@ body {
 .text-item-tools button:hover {
   background: #4b5563;
 }
-.text-item-tools .text-item-del {
-  background: #6b7280;
+/* Red delete button at the top-right corner of a filled text box. */
+.text-item-close {
+  position: absolute;
+  right: -11px;
+  top: -11px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.text-item-close:hover {
+  background: #b91c1c;
 }
 .text-item-size {
   min-width: 34px;

@@ -407,16 +407,6 @@ export default function PageCanvas({
                 <button type="button" title="大きく" onClick={() => changeSize(item, 0.5)}>
                   A＋
                 </button>
-                <span className="text-item-sep" />
-                <button
-                  type="button"
-                  className="text-item-del"
-                  title="このテキストを削除"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => onDeleteText?.(item.id)}
-                >
-                  🗑
-                </button>
               </div>
             )}
             {textMode && (
@@ -427,6 +417,17 @@ export default function PageCanvas({
               >
                 ✥
               </span>
+            )}
+            {textMode && item.text.trim() !== '' && (
+              <button
+                type="button"
+                className="text-item-close"
+                title="このテキストを削除"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onDeleteText?.(item.id)}
+              >
+                ×
+              </button>
             )}
             <textarea
               ref={(el) => {
@@ -460,7 +461,7 @@ export default function PageCanvas({
             />
             {editing && (
               <span className="text-item-hint">
-                Ctrl+Enter で確定 ／ 仕上げにツールバー「文字」でPDFに反映
+                Ctrl+Enter で入力完了 ／ 仕上げにツールバー「文字」でPDFに反映
               </span>
             )}
           </div>
