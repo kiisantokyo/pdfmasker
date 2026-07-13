@@ -2108,19 +2108,32 @@ export function addStamp(opts: StampOptions): DocumentInfo {
  */
 let jpFontData: Uint8Array | null = null
 let jpFont: mupdf.Font | null = null
+let jpFontBoldData: Uint8Array | null = null
+let jpFontBold: mupdf.Font | null = null
 
-/** Supply the Japanese font used for inserted text (TrueType/OpenType bytes). */
+/** Supply the regular Japanese font used for inserted text (font bytes). */
 export function setJpFont(data: Uint8Array): void {
   jpFontData = data
   jpFont = null
 }
 
-function requireJpFont(): mupdf.Font {
-  if (jpFont) return jpFont
+/** Supply the bold Japanese font (optional; enables the 太字 toggle). */
+export function setJpFontBold(data: Uint8Array): void {
+  jpFontBoldData = data
+  jpFontBold = null
+}
+
+/** Return the regular or bold mupdf.Font (bold falls back to regular if the bold
+ *  face was not bundled). Fonts are parsed once and reused across documents. */
+function requireJpFont(bold = false): mupdf.Font {
+  if (bold && jpFontBoldData) {
+    if (!jpFontBold) jpFontBold = new mupdf.Font('PMTextB', jpFontBoldData, 0)
+    return jpFontBold
+  }
   if (!jpFontData) {
     throw new Error('日本語フォントが読み込まれていません（文字入れ機能は未初期化）')
   }
-  jpFont = new mupdf.Font('PMText', jpFontData, 0)
+  if (!jpFont) jpFont = new mupdf.Font('PMText', jpFontData, 0)
   return jpFont
 }
 
@@ -2175,7 +2188,8 @@ export function fontContextAt(
 function textItemBody(
   font: mupdf.Font,
   opts: TextBoxOptions,
-  visH: number
+  visH: number,
+  fontName: string
 ): string {
   const size = Math.max(1, opts.fontSize)
   const col = opts.color ?? { r: 0.1, g: 0.1, b: 0.1 }
@@ -2188,7 +2202,7 @@ function textItemBody(
   const bx = opts.x
   const byTop = visH - (opts.y + ascent)
 
-  let body = 'BT\n' + `/PMTEXT ${fmt(size)} Tf\n`
+  let body = 'BT\n' + `/${fontName} ${fmt(size)} Tf\n`
   body += `${fmt(col.r)} ${fmt(col.g)} ${fmt(col.b)} rg\n`
   body += `${fmt(-leading)} TL\n`
   body += `${fmt(bx)} ${fmt(byTop)} Td\n`
@@ -2253,7 +2267,7 @@ export function insertTextBoxes(items: TextBoxOptions[]): DocumentInfo {
   const d = requireDoc()
   const valid = items.filter((it) => (it.text ?? '').trim())
   if (valid.length === 0) return getInfo()
-  const font = requireJpFont()
+  const font = requireJpFont(false)
   const enc = new TextEncoder()
 
   // Group by page so each page's content stream is rewritten once.
@@ -2274,12 +2288,24 @@ export function insertTextBoxes(items: TextBoxOptions[]): DocumentInfo {
       if (w <= 0 || h <= 0) continue
       const { cm, visH } = pageVisualMatrix(readRotation(page), llx, lly, w, h)
 
-      const fontRef = d.addFont(font)
+      const usesBold = its.some((it) => it.bold)
+      const boldFont = usesBold ? requireJpFont(true) : font
+      const fontDict = ownSubDict(d, ownResources(d, pageObj), 'Font')
+      fontDict.put('PMTEXT', d.addFont(font))
+      if (usesBold) fontDict.put('PMTEXTB', d.addFont(boldFont))
+
       let inner = ''
-      for (const it of its) inner += textItemBody(font, it, visH)
+      for (const it of its) {
+        const bold = !!it.bold
+        inner += textItemBody(
+          bold ? boldFont : font,
+          it,
+          visH,
+          bold ? 'PMTEXTB' : 'PMTEXT'
+        )
+      }
       const ops = 'q\n' + `${cm.map(fmt).join(' ')} cm\n` + inner + 'Q\n'
 
-      ownSubDict(d, ownResources(d, pageObj), 'Font').put('PMTEXT', fontRef)
       const wrapped = concatBytes([
         enc.encode('q\n'),
         readPageContents(pageObj),

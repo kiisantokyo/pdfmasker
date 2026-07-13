@@ -236,6 +236,8 @@ export interface TextBoxOptions {
   fontSize: number
   /** Text colour (defaults to near-black 0.1). */
   color?: TextColor
+  /** Use the bold face (embeds the bundled Bold font). */
+  bold?: boolean
   /**
    * Distance (pt) from the text's top (opts.y) down to the first baseline. The
    * renderer measures this from the SAME font metrics its on-page editor uses, so
@@ -261,6 +263,8 @@ export interface TextItem {
   y: number
   text: string
   fontSize: number
+  /** Whether this box uses the bold face. */
+  bold?: boolean
 }
 
 /**

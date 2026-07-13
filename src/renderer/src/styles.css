@@ -658,6 +658,13 @@ body {
   text-align: center;
   opacity: 0.9;
 }
+.text-item-tools .text-item-bold {
+  font-weight: 700;
+  font-family: Georgia, "Times New Roman", serif;
+}
+.text-item-tools .text-item-bold.on {
+  background: #2563eb;
+}
 .text-item-sep {
   width: 1px;
   height: 14px;

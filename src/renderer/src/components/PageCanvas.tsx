@@ -421,7 +421,7 @@ export default function PageCanvas({
       const guides = guidesRef.current.data
       if (guides && item && !e.altKey) {
         const thr = SNAP_PX / zoom
-        const asc = textAscentPt(item.fontSize)
+        const asc = textAscentPt(item.fontSize, item.bold)
         const sb = snapValue(ny + asc, guides.baselines, thr)
         if (sb != null) {
           ny = Math.max(0, sb - asc)
@@ -486,6 +486,13 @@ export default function PageCanvas({
       e.currentTarget.blur()
       return
     }
+    // Ctrl+B toggles bold for the whole box.
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+      e.preventDefault()
+      e.stopPropagation()
+      onUpdateText?.(item.id, { bold: !item.bold })
+      return
+    }
     if (e.altKey && e.key.startsWith('Arrow')) {
       // Nudge the box: 1pt, or 0.25pt with Shift, for precise placement.
       e.preventDefault()
@@ -500,7 +507,7 @@ export default function PageCanvas({
       const guides = guidesRef.current.data
       if (guides) {
         const thr = SNAP_PX / zoom
-        const asc = textAscentPt(item.fontSize)
+        const asc = textAscentPt(item.fontSize, item.bold)
         const sb = snapValue(ny + asc, guides.baselines, thr)
         const sl = snapValue(nx, guides.lefts, thr)
         flashSnap(
@@ -568,6 +575,19 @@ export default function PageCanvas({
                 <button type="button" title="大きく" onClick={() => changeSize(item, 0.5)}>
                   A＋
                 </button>
+                <span className="text-item-sep" />
+                <button
+                  type="button"
+                  className={'text-item-bold' + (item.bold ? ' on' : '')}
+                  title="太字（Ctrl+B）"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onUpdateText?.(item.id, { bold: !item.bold })
+                    editRef.current?.focus()
+                  }}
+                >
+                  B
+                </button>
               </div>
             )}
             {textMode && (
@@ -604,7 +624,8 @@ export default function PageCanvas({
               style={{
                 fontSize: item.fontSize * zoom,
                 lineHeight: TEXT_LINE_HEIGHT,
-                fontFamily: JP_FONT_STACK
+                fontFamily: JP_FONT_STACK,
+                fontWeight: item.bold ? 700 : 400
               }}
               onPointerDown={(e) => {
                 // Not the box being edited: drag to move, or click to edit it.

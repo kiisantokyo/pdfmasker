@@ -7,11 +7,13 @@
 ## 同梱フォント
 
 - **`pmtext-jp.ttf`** … **BIZ UDGothic Regular**（Morisawa）。
-  - ライセンス: **SIL Open Font License 1.1**（`OFL.txt` 参照）。埋め込み・再配布ともに許諾。
+- **`pmtext-jp-bold.ttf`** … **BIZ UDGothic Bold**（Morisawa）。「太字」トグル用。
+  - ライセンス: 両方とも **SIL Open Font License 1.1**（`OFL.txt` 参照。同一プロジェクト）。
+    埋め込み・再配布ともに許諾。
   - 取得元: https://github.com/googlefonts/morisawa-biz-ud-gothic
   - 選定理由: ユニバーサルデザイン書体で帳票・書類に読みやすく、Windows 同梱の
     「BIZ UDGothic」と同一デザインのため、画面のオーバーレイ（CSSの `BIZ UDGothic`）と
-    焼き込み結果の字形・メトリクスが一致する。
+    焼き込み結果の字形・メトリクスが一致する（太字も Windows の太字実体と一致）。
 
 ## 読み込みと配布
 

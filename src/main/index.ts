@@ -599,12 +599,22 @@ async function loadJpFont(): Promise<void> {
     try {
       const bytes = await readFile(path)
       pdf.setJpFont(new Uint8Array(bytes))
-      return
+      break
     } catch {
       // try the next candidate
     }
   }
-  console.warn('[font] 日本語フォントを読み込めませんでした（文字入れは無効）')
+
+  // Bold face (optional — enables the 太字 toggle). Missing bold just falls back
+  // to regular at burn time, so this failure is silent.
+  const boldPath = app.isPackaged
+    ? join(process.resourcesPath, 'fonts', 'pmtext-jp-bold.ttf')
+    : join(import.meta.dirname, '../..', 'resources', 'fonts', 'pmtext-jp-bold.ttf')
+  try {
+    pdf.setJpFontBold(new Uint8Array(await readFile(boldPath)))
+  } catch {
+    // no bold face bundled — 太字 will fall back to the regular weight
+  }
 }
 
 app.whenReady().then(() => {

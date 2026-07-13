@@ -43,12 +43,12 @@ export function snapValue(
 let measureCtx: CanvasRenderingContext2D | null | undefined
 
 /** Font ascent/descent for JP_FONT_STACK, as fractions of the em (font size). */
-function jpFontMetrics(): { ascent: number; descent: number } {
+function jpFontMetrics(bold: boolean): { ascent: number; descent: number } {
   if (measureCtx === undefined) {
     measureCtx = document.createElement('canvas').getContext('2d')
   }
   if (!measureCtx) return { ascent: 0.88, descent: 0.21 }
-  measureCtx.font = `100px ${JP_FONT_STACK}`
+  measureCtx.font = `${bold ? 'bold ' : ''}100px ${JP_FONT_STACK}`
   const m = measureCtx.measureText('あ')
   const a = m.fontBoundingBoxAscent
   const d = m.fontBoundingBoxDescent
@@ -65,8 +65,8 @@ function jpFontMetrics(): { ascent: number; descent: number } {
  * Simplifies to lineHeight/2 + (ascent−descent)/2. This is what makes the burned
  * text land exactly on the overlay's baseline.
  */
-export function textAscentPt(fontSize: number): number {
-  const { ascent, descent } = jpFontMetrics()
+export function textAscentPt(fontSize: number, bold = false): number {
+  const { ascent, descent } = jpFontMetrics(bold)
   const lineHeightPt = TEXT_LINE_HEIGHT * fontSize
   return lineHeightPt / 2 + ((ascent - descent) / 2) * fontSize
 }

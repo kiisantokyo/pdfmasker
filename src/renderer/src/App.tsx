@@ -684,7 +684,8 @@ export default function App(): React.JSX.Element {
           y: t.y,
           text: t.text,
           fontSize: t.fontSize,
-          ascentPt: textAscentPt(t.fontSize),
+          bold: t.bold,
+          ascentPt: textAscentPt(t.fontSize, t.bold),
           lineHeightPt: TEXT_LINE_HEIGHT * t.fontSize
         }))
       )
