@@ -660,22 +660,23 @@ body {
   margin: 0 3px;
   background: rgba(255, 255, 255, 0.25);
 }
-/* Snap alignment guide lines (shown while dragging a box onto document text). */
+/* Snap alignment guide lines (shown when a box aligns to document text). */
 .snap-guide {
   position: absolute;
-  z-index: 19;
+  z-index: 21;
   background: #ec4899;
+  box-shadow: 0 0 3px rgba(236, 72, 153, 0.7);
   pointer-events: none;
 }
 .snap-guide.snap-h {
   left: 0;
   right: 0;
-  height: 1px;
+  height: 2px;
 }
 .snap-guide.snap-v {
   top: 0;
   bottom: 0;
-  width: 1px;
+  width: 2px;
 }
 /* Subtle "how to finish" caption under the box being edited. */
 .text-item-hint {

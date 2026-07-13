@@ -16,7 +16,7 @@ export const JP_FONT_STACK =
 export const TEXT_LINE_HEIGHT = 1.3
 
 /** Snap distance in screen pixels: a box snaps to a guide within this range. */
-export const SNAP_PX = 8
+export const SNAP_PX = 10
 
 /**
  * Nearest candidate to `value` within `threshold`, or null if none is close.

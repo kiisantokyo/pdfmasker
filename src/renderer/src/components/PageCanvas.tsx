@@ -53,8 +53,17 @@ interface Props {
   textItems?: TextItem[]
   /** Which text box is currently being edited (focuses its textarea). */
   editingTextId?: number | null
-  /** Create a new empty text box at a page-space point (parent seeds its size). */
-  onCreateText?: (pageIndex: number, pagePt: { x: number; y: number }) => void
+  /** Fallback size (pt) for a new box when no nearby text is detected. */
+  defaultFontSize?: number
+  /**
+   * Create a new text box. PageCanvas already resolved its size (nearby text or
+   * the fallback) and snapped its position to the document, so the parent just
+   * stores it and starts editing.
+   */
+  onCreateText?: (
+    pageIndex: number,
+    box: { x: number; y: number; fontSize: number }
+  ) => void
   onUpdateText?: (id: number, patch: Partial<TextItem>) => void
   onDeleteText?: (id: number) => void
   /** Report which box is being edited (id) or that editing ended (null). */
@@ -91,6 +100,7 @@ export default function PageCanvas({
   textMode = false,
   textItems = [],
   editingTextId = null,
+  defaultFontSize = 10.5,
   onCreateText,
   onUpdateText,
   onDeleteText,
@@ -110,22 +120,50 @@ export default function PageCanvas({
   // Snap guide line to show while dragging (canvas px; x=vertical, y=horizontal).
   const [snapLine, setSnapLine] = useState<{ x?: number; y?: number } | null>(null)
   const editRef = useRef<HTMLTextAreaElement | null>(null)
-  // Alignment guides for THIS page, fetched lazily and cached per render.
-  const guidesRef = useRef<{ key: number; g: TextGuides | null }>({ key: -1, g: null })
-  const ensureGuides = useCallback(() => {
+  const snapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Alignment guides for THIS page. Cached per render; `data` is the resolved
+  // value (read synchronously while dragging), `p` the in-flight/cached promise.
+  const guidesRef = useRef<{
+    key: number
+    p: Promise<TextGuides> | null
+    data: TextGuides | null
+  }>({ key: -1, p: null, data: null })
+  const getGuides = useCallback((): Promise<TextGuides> => {
     const gr = guidesRef.current
     if (gr.key !== refreshKey) {
       gr.key = refreshKey
-      gr.g = null
+      gr.p = null
+      gr.data = null
     }
-    if (gr.g) return
-    pdfApi
-      .textGuides(pageIndex)
-      .then((g) => {
-        if (guidesRef.current.key === refreshKey) guidesRef.current.g = g
+    if (!gr.p) {
+      gr.p = pdfApi
+        .textGuides(pageIndex)
+        .catch(() => ({ baselines: [], lefts: [] }) as TextGuides)
+      gr.p.then((d) => {
+        if (guidesRef.current.key === refreshKey) guidesRef.current.data = d
       })
-      .catch(() => {})
+    }
+    return gr.p
   }, [pageIndex, refreshKey])
+
+  // Prefetch guides when 文字入れ turns on, so the first drag/click snaps at once.
+  useEffect(() => {
+    if (textMode) void getGuides()
+  }, [textMode, getGuides])
+
+  // Clear any pending snap-line timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (snapTimer.current) clearTimeout(snapTimer.current)
+    }
+  }, [])
+
+  // Show the snap guide line(s) briefly (canvas px), then fade.
+  const flashSnap = useCallback((line: { x?: number; y?: number } | null) => {
+    if (snapTimer.current) clearTimeout(snapTimer.current)
+    setSnapLine(line)
+    if (line) snapTimer.current = setTimeout(() => setSnapLine(null), 900)
+  }, [])
 
   // Fetch + decode the page render whenever page/zoom/refresh changes.
   useEffect(() => {
@@ -253,12 +291,43 @@ export default function PageCanvas({
     const dy = Math.abs(drag.y1 - drag.y0)
     const isClick = dx <= 4 && dy <= 4
 
-    // 文字入れ: a click on empty page space creates a new text box there.
+    // 文字入れ: a click on empty page space creates a new text box, sized from
+    // nearby text and snapped (baseline/left) to the document. A guide line
+    // flashes so the alignment is visible.
     if (textMode) {
+      const cx = drag.x0
+      const cy = drag.y0
       setDrag(null)
       setTextPreview([])
       if (isClick && onCreateText) {
-        onCreateText(pageIndex, { x: drag.x0 / zoom, y: drag.y0 / zoom })
+        const px = cx / zoom
+        const py = cy / zoom
+        let fontSize = defaultFontSize
+        try {
+          const ctx = await pdfApi.fontContextAt(pageIndex, px, py)
+          if (ctx.fontSize) fontSize = ctx.fontSize
+        } catch {
+          // keep the fallback size
+        }
+        const guides = await getGuides()
+        const thr = SNAP_PX / zoom
+        const asc = textAscentPt(fontSize)
+        let x = px
+        let y = Math.max(0, py - (TEXT_LINE_HEIGHT * fontSize) / 2)
+        let gx: number | undefined
+        let gy: number | undefined
+        const sb = snapValue(y + asc, guides.baselines, thr)
+        if (sb != null) {
+          y = Math.max(0, sb - asc)
+          gy = sb * zoom
+        }
+        const sl = snapValue(x, guides.lefts, thr)
+        if (sl != null) {
+          x = sl
+          gx = sl * zoom
+        }
+        flashSnap(gx != null || gy != null ? { x: gx, y: gy } : null)
+        onCreateText(pageIndex, { x, y, fontSize })
       }
       return
     }
@@ -336,7 +405,7 @@ export default function PageCanvas({
       let ny = Math.max(0, (e.clientY - r.top - move.offY) / zoom)
       let gx: number | undefined
       let gy: number | undefined
-      const guides = guidesRef.current.g
+      const guides = guidesRef.current.data
       if (guides && item && !e.altKey) {
         const thr = SNAP_PX / zoom
         const asc = textAscentPt(item.fontSize)
@@ -369,7 +438,7 @@ export default function PageCanvas({
   const startMove = (e: React.PointerEvent, item: TextItem): void => {
     e.preventDefault()
     e.stopPropagation()
-    ensureGuides()
+    void getGuides()
     const r = canvasRef.current!.getBoundingClientRect()
     setMove({
       id: item.id,

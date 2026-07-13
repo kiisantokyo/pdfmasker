@@ -18,17 +18,11 @@ import type {
   StampKind,
   StampPosition,
   TermCount,
-  TextGuides,
   TextItem
 } from '@shared/types'
 import { DEFAULT_NAME_OPTIONS, STAMP_LABELS } from '@shared/types'
 import { pdfApi } from './lib/api'
-import {
-  SNAP_PX,
-  TEXT_LINE_HEIGHT,
-  snapValue,
-  textAscentPt
-} from './lib/textMetrics'
+import { TEXT_LINE_HEIGHT, textAscentPt } from './lib/textMetrics'
 import Toolbar from './components/Toolbar'
 import PageSidebar from './components/PageSidebar'
 import ContinuousViewer from './components/ContinuousViewer'
@@ -142,29 +136,6 @@ export default function App(): React.JSX.Element {
   const [textItems, setTextItems] = useState<TextItem[]>([])
   const [editingTextId, setEditingTextId] = useState<number | null>(null)
   const textIdRef = useRef(1)
-  // Per-page alignment guides (text baselines/left edges), cached until the page
-  // is re-rendered (refreshKey changes).
-  const guidesRef = useRef<{ key: number; map: Map<number, TextGuides> }>({
-    key: 0,
-    map: new Map()
-  })
-  const getGuides = useCallback(
-    async (pageIndex: number): Promise<TextGuides> => {
-      const cache = guidesRef.current
-      if (cache.key !== refreshKey) {
-        cache.key = refreshKey
-        cache.map.clear()
-      }
-      const hit = cache.map.get(pageIndex)
-      if (hit) return hit
-      const fresh = await pdfApi
-        .textGuides(pageIndex)
-        .catch(() => ({ baselines: [], lefts: [] }))
-      cache.map.set(pageIndex, fresh)
-      return fresh
-    },
-    [refreshKey]
-  )
   // 隠し文字（透明テキスト）モーダル
   const [hiddenReport, setHiddenReport] = useState<HiddenTextReport | null>(null)
   // 開いたファイルに隠し文字があった件数（警告バナー用。null=警告なし）
@@ -664,40 +635,20 @@ export default function App(): React.JSX.Element {
     }, 'スタンプの付与')
 
   // 文字入れ: create/edit/move/delete editable text boxes (not yet burned), then
-  // apply them all at once. A new box copies the size of the text under the click.
+  // apply them all at once. PageCanvas resolves the size (nearby text) and snaps
+  // the position, then hands us the finished box to store and start editing.
   const createText = (
     pageIndex: number,
-    pt: { x: number; y: number }
-  ): Promise<void> =>
-    run(async () => {
-      let fontSize = lastFontSize
-      try {
-        const ctx = await pdfApi.fontContextAt(pageIndex, pt.x, pt.y)
-        if (ctx.fontSize) fontSize = ctx.fontSize
-      } catch {
-        // no nearby text — keep the last-used size
-      }
-      // Anchor the click to the vertical CENTRE of the first line, so the box
-      // appears where the cursor is (not half a line below it). x stays the left
-      // edge. Overlay and burn both use this y, so they still match exactly.
-      let x = pt.x
-      let y = Math.max(0, pt.y - (TEXT_LINE_HEIGHT * fontSize) / 2)
-      // 行スナップ: align the new box's baseline / left edge to nearby document
-      // text so it lines up with form fields and table cells.
-      const guides = await getGuides(pageIndex)
-      const thr = SNAP_PX / zoom
-      const asc = textAscentPt(fontSize)
-      const sb = snapValue(y + asc, guides.baselines, thr)
-      if (sb != null) y = Math.max(0, sb - asc)
-      const sl = snapValue(x, guides.lefts, thr)
-      if (sl != null) x = sl
-      const id = textIdRef.current++
-      setTextItems((items) => [
-        ...items,
-        { id, pageIndex, x, y, text: '', fontSize }
-      ])
-      setEditingTextId(id)
-    }, '文字ボックスの追加')
+    box: { x: number; y: number; fontSize: number }
+  ): void => {
+    const id = textIdRef.current++
+    setTextItems((items) => [
+      ...items,
+      { id, pageIndex, x: box.x, y: box.y, text: '', fontSize: box.fontSize }
+    ])
+    setLastFontSize(box.fontSize)
+    setEditingTextId(id)
+  }
 
   const updateText = (id: number, patch: Partial<TextItem>): void => {
     setTextItems((items) =>
@@ -2668,6 +2619,7 @@ export default function App(): React.JSX.Element {
             textMode={textMode}
             textItems={textItems}
             editingTextId={editingTextId}
+            defaultFontSize={lastFontSize}
             onCreateText={createText}
             onUpdateText={updateText}
             onDeleteText={deleteText}

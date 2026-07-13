@@ -34,7 +34,11 @@ interface Props {
   textMode?: boolean
   textItems?: TextItem[]
   editingTextId?: number | null
-  onCreateText?: (pageIndex: number, pagePt: { x: number; y: number }) => void
+  defaultFontSize?: number
+  onCreateText?: (
+    pageIndex: number,
+    box: { x: number; y: number; fontSize: number }
+  ) => void
   onUpdateText?: (id: number, patch: Partial<TextItem>) => void
   onDeleteText?: (id: number) => void
   onEditText?: (id: number | null) => void
@@ -58,6 +62,7 @@ export default function ContinuousViewer({
   textMode = false,
   textItems = [],
   editingTextId = null,
+  defaultFontSize,
   onCreateText,
   onUpdateText,
   onDeleteText,
@@ -140,6 +145,7 @@ export default function ContinuousViewer({
                 textMode={textMode}
                 textItems={textItems.filter((t) => t.pageIndex === p.index)}
                 editingTextId={editingTextId}
+                defaultFontSize={defaultFontSize}
                 onCreateText={onCreateText}
                 onUpdateText={onUpdateText}
                 onDeleteText={onDeleteText}
