@@ -640,6 +640,21 @@ body {
   margin: 0 3px;
   background: rgba(255, 255, 255, 0.25);
 }
+/* Subtle "how to finish" caption under the box being edited. */
+.text-item-hint {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  margin-top: 3px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(31, 41, 55, 0.9);
+  color: #e5e7eb;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .canvas-loading {
   position: absolute;
   top: 8px;

@@ -288,13 +288,15 @@ export default function PageCanvas({
     setTextPreview([])
   }
 
-  // Grow a text box's <textarea> to fit its content (no wrapping, so the overlay
-  // matches the non-wrapping burned text).
+  // Size a text box's <textarea> to exactly fit its content (no wrapping, so the
+  // overlay matches the non-wrapping burned text). Collapse to 0 first: with
+  // width:auto a textarea reports its default multi-column width, so it would
+  // never shrink to the typed text — measuring from 0 gives the true content size.
   const autoGrow = (el: HTMLTextAreaElement): void => {
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-    el.style.width = 'auto'
+    el.style.width = '0px'
     el.style.width = `${el.scrollWidth + 2}px`
+    el.style.height = '0px'
+    el.style.height = `${el.scrollHeight}px`
   }
 
   // Drag a text box by its handle: track pointer globally until release.
@@ -456,6 +458,11 @@ export default function PageCanvas({
                 onEditText?.(null)
               }}
             />
+            {editing && (
+              <span className="text-item-hint">
+                Ctrl+Enter で確定 ／ 仕上げにツールバー「文字」でPDFに反映
+              </span>
+            )}
           </div>
         )
       })}

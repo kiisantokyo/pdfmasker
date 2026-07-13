@@ -648,10 +648,14 @@ export default function App(): React.JSX.Element {
       } catch {
         // no nearby text — keep the last-used size
       }
+      // Anchor the click to the vertical CENTRE of the first line, so the box
+      // appears where the cursor is (not half a line below it). x stays the left
+      // edge. Overlay and burn both use this y, so they still match exactly.
+      const y = Math.max(0, pt.y - (TEXT_LINE_HEIGHT * fontSize) / 2)
       const id = textIdRef.current++
       setTextItems((items) => [
         ...items,
-        { id, pageIndex, x: pt.x, y: pt.y, text: '', fontSize }
+        { id, pageIndex, x: pt.x, y, text: '', fontSize }
       ])
       setEditingTextId(id)
     }, '文字ボックスの追加')
