@@ -67,6 +67,11 @@ a:hover { text-decoration: underline; }
 
 /* ---------- ヒーロー ---------- */
 .hero { background: linear-gradient(180deg, #f7f6fe 0%, #ffffff 100%); padding: 72px 0 56px; }
+.hero-tag {
+  display: inline-block; background: #eceafb; color: var(--accent-d);
+  font-size: 12.5px; font-weight: 700; padding: 5px 13px; border-radius: 999px;
+  margin-bottom: 16px; letter-spacing: .04em;
+}
 .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
 .hero-title { font-size: clamp(32px, 5vw, 52px); line-height: 1.25; margin: 0 0 20px; font-weight: 900; letter-spacing: .01em; }
 .hero-title .accent { color: var(--danger); }
@@ -136,7 +141,16 @@ a:hover { text-decoration: underline; }
 
 /* ---------- スクリーンショット ---------- */
 .shot { margin: 0; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--line); background: #fff; }
-.shot img { display: block; width: 100%; height: auto; }
+.shot img { display: block; width: 100%; height: auto; cursor: zoom-in; }
+.shot.missing img { cursor: default; }
+
+/* スクショ拡大（ライトボックス） */
+.lightbox { position: fixed; inset: 0; z-index: 1000; display: none; align-items: center; justify-content: center; padding: 28px; background: rgba(15, 13, 25, .92); }
+.lightbox.open { display: flex; }
+.lightbox img { max-width: 96vw; max-height: 86vh; width: auto; height: auto; border-radius: 8px; background: #fff; box-shadow: 0 24px 70px rgba(0,0,0,.55); cursor: zoom-out; }
+.lightbox-cap { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; color: #d9d6e6; font-size: 13px; padding: 0 20px; }
+.lightbox-close { position: absolute; top: 12px; right: 20px; width: 42px; height: 42px; border: 0; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; }
+.lightbox-close:hover { background: rgba(255,255,255,.24); }
 .shot figcaption { font-size: 13px; color: var(--ink-soft); text-align: center; padding: 10px 14px; background: #fafafd; border-top: 1px solid var(--line); }
 .shot-lg { transform: perspective(1200px) rotateY(-2deg); }
 
@@ -149,8 +163,16 @@ a:hover { text-decoration: underline; }
 }
 .shot.missing figcaption::before { content: "（未配置）"; color: #b3043a; margin-right: 6px; }
 
-.shot-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-.shot-trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.shot-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+.shot-trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; align-items: start; }
+/* 横並びのスクショは縦横比を統一して高さをそろえる（上＝ツールバー側を残してトリミング） */
+.shot-pair .shot img,
+.shot-trio .shot img,
+.media-2 .shot img {
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top center;
+}
 
 /* ---------- 2カラム（OCR / AI） ---------- */
 .narrow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 44px; align-items: center; }
@@ -210,16 +232,65 @@ a:hover { text-decoration: underline; }
 .footer-copy { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-top: 22px; font-size: 13px; color: #8c8aa0; }
 .footer-copy a { color: #b6b3c8; }
 
+/* ---------- 動画（YouTube 2本） ---------- */
+.video-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+.video-card { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+.video-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #0d0d14; }
+.video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-soon { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: repeating-linear-gradient(45deg, #1b1a27, #1b1a27 14px, #201f2e 14px, #201f2e 28px); color: #cfc9e6; text-align: center; }
+.video-soon .big { font-size: 22px; font-weight: 800; letter-spacing: .04em; }
+.video-soon .small { font-size: 13px; color: #9b98b5; }
+.video-card figcaption { padding: 20px 22px 24px; }
+.video-badge { display: inline-block; background: #eceafb; color: var(--accent-d); font-size: 12px; font-weight: 800; padding: 4px 11px; border-radius: 999px; letter-spacing: .04em; }
+.video-badge.badge-pro { background: #1f1d2b; color: #fff; }
+.video-time { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; background: #f1f0f6; color: var(--ink-soft); font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; vertical-align: middle; letter-spacing: .02em; }
+.video-time::before { content: ""; width: 13px; height: 13px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b6880' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E") center/contain no-repeat; }
+.video-card h3 { margin: 12px 0 6px; font-size: 18px; }
+.video-card figcaption p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+/* ---------- 隠し文字・インジェクション対策（濃色セクション） ---------- */
+.section-dark { background: radial-gradient(1200px 500px at 50% -10%, #2a2740 0%, #1c1a29 60%); color: #e7e5f2; }
+.eyebrow { display: inline-block; color: #c7bcff; font-weight: 800; font-size: 13px; letter-spacing: .08em; margin-bottom: 12px; }
+.section-title.invert { color: #fff; }
+.section-lead.invert { color: #b8b4cf; }
+.hidden-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 8px 0 40px; }
+.hidden-card { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: var(--radius); padding: 22px; }
+.hidden-ico { font-size: 26px; }
+.hidden-card h3 { margin: 10px 0 6px; font-size: 16.5px; color: #fff; }
+.hidden-card p { margin: 0; font-size: 14px; color: #b8b4cf; line-height: 1.75; }
+
+/* 白塗りチップ */
+.chip--white .sq { background: #fff; border: 1px solid #c8c5d6; }
+
+/* キーボードキー表記 */
+.kbd { display: inline-block; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12.5px; font-weight: 700; color: #33313f; background: #fff; border: 1px solid #cfccdf; border-bottom-width: 2px; border-radius: 6px; padding: 2px 8px; margin: 0 2px; }
+
+/* クリップボード連携セクション */
+.clip-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 36px; }
+.clip-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+.clip-ico { font-size: 28px; }
+.clip-card h3 { margin: 10px 0 8px; font-size: 17px; }
+.clip-card p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+.clip-card .keys { margin-top: 12px; }
+
+/* ---------- Microsoft Store ボタン ---------- */
+.btn-store { background: #1f1d2b; color: #fff; gap: 12px; padding: 12px 26px; }
+.btn-store:hover { background: #33304a; }
+.btn-store .store-logo { font-size: 26px; line-height: 1; color: #4cc2ff; }
+.btn-store .store-txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; text-align: left; font-weight: 800; font-size: 18px; }
+.btn-store .store-txt small { font-size: 10.5px; font-weight: 600; opacity: .8; letter-spacing: .06em; }
+.price-tag .amount { font-size: 40px; }
+
 /* ---------- レスポンシブ ---------- */
 @media (max-width: 900px) {
-  .hero-grid, .narrow-grid, .pricing { grid-template-columns: 1fr; }
+  .hero-grid, .narrow-grid, .pricing, .video-grid { grid-template-columns: 1fr; }
   .narrow-grid.reverse .shot { order: 0; }
-  .points, .feature-grid, .edit-grid, .assure-grid, .shot-trio { grid-template-columns: 1fr 1fr; }
+  .points, .feature-grid, .edit-grid, .assure-grid, .shot-trio, .hidden-grid, .clip-grid { grid-template-columns: 1fr 1fr; }
   .shot-lg { transform: none; }
 }
 @media (max-width: 600px) {
   .nav-links { gap: 12px; }
   .nav-links a:not(.btn) { display: none; }
-  .compare, .points, .feature-grid, .edit-grid, .assure-grid, .shot-pair, .shot-trio { grid-template-columns: 1fr; }
+  .compare, .points, .feature-grid, .edit-grid, .assure-grid, .shot-pair, .shot-trio, .hidden-grid, .clip-grid { grid-template-columns: 1fr; }
   .section { padding: 56px 0; }
 }

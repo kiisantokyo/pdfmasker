@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- Google Analytics 4 (GA4) — /pdfmasker/ 配下のみに設置 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-JLKWNBM327"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-JLKWNBM327');
+</script>
+<title>使い方ガイド｜究極の墨消し</title>
+<meta name="description" content="究極の墨消しの使い方ガイド。PDFを開く・墨消しする・保存するの基本から、隠し文字対策やAI連携まで、機能ごとに手順を解説します。" />
+<link rel="canonical" href="https://www.cosmo-law.jp/pdfmasker/guide.html" />
+<link rel="icon" type="image/png" href="assets/favicon.png" />
+<link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .guide-hero { background: linear-gradient(180deg, #f7f6fe 0%, #fff 100%); padding: 48px 0 36px; border-bottom: 1px solid var(--line); }
+  .guide-hero h1 { font-size: clamp(26px, 4vw, 38px); margin: 6px 0 12px; }
+  .guide-hero p { color: var(--ink-soft); font-size: 16px; max-width: 720px; margin: 0; }
+  .kicker { display: inline-block; color: var(--accent-d); font-weight: 800; font-size: 13px; letter-spacing: .06em; }
+
+  .guide-wrap { display: grid; grid-template-columns: 232px 1fr; gap: 46px; padding: 44px 0 90px; }
+  .toc { position: sticky; top: 84px; align-self: start; font-size: 14px; }
+  .toc h4 { font-size: 12px; letter-spacing: .08em; color: var(--ink-soft); margin: 0 0 10px; }
+  .toc a { display: block; color: var(--ink-soft); padding: 6px 10px; border-radius: 8px; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--accent); background: var(--bg-alt); text-decoration: none; }
+  .toc .toc-num { color: #b6b2cc; font-weight: 700; margin-right: 7px; }
+
+  .guide-body h2 { font-size: 23px; margin: 8px 0 6px; scroll-margin-top: 82px; }
+  .guide-body .sec { padding: 30px 0; border-bottom: 1px solid var(--line); }
+  .guide-body .sec:first-child { padding-top: 0; }
+  .guide-body .sec > p { color: #37363f; }
+  .sec-badge { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent); color: #fff; font-weight: 800; font-size: 15px; margin-right: 10px; vertical-align: middle; }
+
+  /* 手順（番号付き） */
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 18px 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 4px 0 16px 44px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 2px; width: 28px; height: 28px; border-radius: 50%; background: #efeefc; color: var(--accent-d); font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  ol.steps > li strong { display: block; margin-bottom: 2px; }
+  ol.steps > li p { margin: 4px 0; color: var(--ink-soft); font-size: 14.5px; }
+
+  .tip, .warn { border-radius: 12px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+  .tip { background: #f2fbf7; border: 1px solid #bfe6d4; color: #1d5e44; }
+  .warn { background: #fff7ed; border: 1px solid #f2d09a; color: #7a4b12; }
+  .tip b, .warn b { font-weight: 800; }
+
+  .chips-row { margin: 12px 0 6px; }
+  .shot.mini figcaption { font-size: 12.5px; }
+  .media-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 16px 0; }
+  .guide-cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+
+  @media (max-width: 860px) {
+    .guide-wrap { grid-template-columns: 1fr; gap: 8px; }
+    .toc { position: static; margin-bottom: 20px; border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #fff; }
+    .media-2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container nav">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true">■</span>
+      <span class="brand-name">究極の墨消し</span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html#videos">動画</a>
+      <a href="index.html#features">機能</a>
+      <a href="guide.html">使い方</a>
+      <a class="btn btn-sm btn-primary" href="index.html#download">ダウンロード</a>
+    </nav>
+  </div>
+</header>
+
+<section class="guide-hero">
+  <div class="container">
+    <span class="kicker">USER GUIDE</span>
+    <h1>使い方ガイド</h1>
+    <p>「開く → 選ぶ → 墨消し → 確認 → 保存」がすべての基本です。まずはクイックスタートを、慣れてきたら各機能の詳しい手順をご覧ください。</p>
+  </div>
+</section>
+
+<div class="container">
+  <div class="guide-wrap">
+
+    <!-- ============ 目次 ============ -->
+    <aside class="toc">
+      <h4>もくじ</h4>
+      <a href="#screen"><span class="toc-num">0</span>画面の見方</a>
+      <a href="#quick"><span class="toc-num">1</span>クイックスタート</a>
+      <a href="#open"><span class="toc-num">2</span>開く・取り込む</a>
+      <a href="#select"><span class="toc-num">3</span>選択する</a>
+      <a href="#apply"><span class="toc-num">4</span>墨・白・黄で処理</a>
+      <a href="#ocr"><span class="toc-num">5</span>スキャンPDF（OCR）</a>
+      <a href="#ai"><span class="toc-num">6</span>AIに候補を相談</a>
+      <a href="#safe"><span class="toc-num">7</span>受け取ったPDFの安全対策</a>
+      <a href="#pages"><span class="toc-num">8</span>ページ編集・仕上げ</a>
+      <a href="#save"><span class="toc-num">9</span>保存する</a>
+      <a href="#tips"><span class="toc-num">★</span>困ったとき・コツ</a>
+    </aside>
+
+    <!-- ============ 本文 ============ -->
+    <main class="guide-body">
+
+      <!-- 0 画面の見方 -->
+      <section id="screen" class="sec">
+        <h2><span class="sec-badge">0</span>画面の見方</h2>
+        <p>画面上部のツールバーは3段に分かれています。<strong>1段目＝選択と墨消しの主作業</strong>、<strong>2段目＝ページ編集・ズーム・保存</strong>、<strong>3段目＝受け取ったPDFの安全チェック</strong>。左側のサイドバーはページのサムネイル一覧です。</p>
+        <figure class="shot">
+          <img src="assets/ss-01-main.png" alt="メイン画面全体" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+          <figcaption data-ss="SS-1">メイン画面（上：3段ツールバー／左：サムネ一覧／中央：ページ表示）</figcaption>
+        </figure>
+      </section>
+
+      <!-- 1 クイックスタート -->
+      <section id="quick" class="sec">
+        <h2><span class="sec-badge">1</span>クイックスタート（最短5ステップ）</h2>
+        <ol class="steps">
+          <li><strong>PDFを開く</strong><p>「開く…」を押すか、ファイルを画面にドラッグ＆ドロップします。</p></li>
+          <li><strong>消したい場所を選ぶ</strong><p>文字をなぞる／単語をクリック／四角で囲む。選んだ範囲は青くマークされます。</p></li>
+          <li><strong>「墨（N）」を押す</strong><p>選択したN件を、下のデータごと完全に削除します。<span class="chip chip--sumi"><i class="sq"></i>墨<i class="count">2</i></span></p></li>
+          <li><strong>結果を確認する</strong><p>消えているか、消し漏れがないかを必ず目視で確認します。</p></li>
+          <li><strong>保存する</strong><p>「保存」を押して、別名で書き出します。</p></li>
+        </ol>
+        <div class="tip"><b>ヒント：</b>操作はいつでも <b>Ctrl+Z</b>（元に戻す）／<b>Ctrl+Y</b>（やり直し）で戻せます。安心して試してください。</div>
+      </section>
+
+      <!-- 2 開く・取り込む -->
+      <section id="open" class="sec">
+        <h2><span class="sec-badge">2</span>開く・取り込む</h2>
+        <p>「開く…」ボタン、またはウィンドウへのドラッグ＆ドロップで開けます。<strong>複数のファイル（PDF・Word・画像）をまとめてドロップ</strong>すると、ファイル名の順に1つのPDFへ連結します。</p>
+        <ol class="steps">
+          <li><strong>1ファイルを開く</strong><p>「開く…」→ファイル選択、または1つだけドロップ。</p></li>
+          <li><strong>複数をまとめて取り込む</strong><p>複数ファイルを同時にドロップ → ファイル名順に連結。順番はサムネのドラッグで後から入れ替えできます。</p></li>
+        </ol>
+        <figure class="shot mini">
+          <img src="assets/ss-17-merge.png" alt="複数ファイルの取り込み・連結" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" />
+          <figcaption data-ss="SS-17">複数ファイルをまとめてドラッグ＆ドロップ → 連結</figcaption>
+        </figure>
+        <div class="warn"><b>ご注意：</b>Word（.docx等）の取り込みには <b>Microsoft Word</b> が必要です。</div>
+      </section>
+
+      <!-- 3 選択する -->
+      <section id="select" class="sec">
+        <h2><span class="sec-badge">3</span>選択する（4つの方法）</h2>
+        <p>消したい箇所は、好きな方法で選べます。選択した範囲は青くマークされ、あとでまとめて処理します。</p>
+        <ol class="steps">
+          <li><strong>なぞって選択</strong><p>テキストをドラッグ。ドラッグ中にライブプレビューで範囲が見えます。<span class="chip chip--mode">選択：文字なぞり</span></p></li>
+          <li><strong>単語クリック</strong><p>消したい単語をクリックでピンポイント選択。</p></li>
+          <li><strong>四角で囲む</strong><p>表・図・印影など、テキストでない部分は矩形で囲みます。</p></li>
+          <li><strong>キーワード検索から追加</strong><p>語を検索してヒット箇所を選択に追加。<span class="chip chip--search">🔍 キーワードで検索</span> <span class="chip">🔍 追加</span></p></li>
+          <li><strong>同じ語を一括追加</strong><p>直前に選んだ語と同じ言葉を、文書全体からまとめて追加。<span class="chip">同語＋</span></p></li>
+        </ol>
+        <div class="media-2">
+          <figure class="shot mini"><img src="assets/ss-05-trace.png" alt="なぞり選択" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-5">なぞり選択</figcaption></figure>
+          <figure class="shot mini"><img src="assets/ss-06-sameword.png" alt="同語＋で一括選択" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-6">同語＋で一括選択</figcaption></figure>
+        </div>
+        <div class="tip"><b>選択をやり直したいとき：</b>「✕」ボタンで選択をすべてクリアできます。</div>
+      </section>
+
+      <!-- 4 墨・白・黄 -->
+      <section id="apply" class="sec">
+        <h2><span class="sec-badge">4</span>墨・白・黄で処理する</h2>
+        <p>選択したら、上部ボタンで処理します。かっこ内の数字（N）は現在の選択件数です。</p>
+        <ol class="steps">
+          <li><strong>墨（完全削除）</strong><p>下層のテキスト・画像データごと削除。これが「真の墨消し」です。<span class="chip chip--sumi"><i class="sq"></i>墨<i class="count">0</i></span></p></li>
+          <li><strong>白（白地で消す）</strong><p>白く塗りつぶして消します（データも削除する真の墨消し・白地）。<span class="chip chip--white"><i class="sq"></i>白<i class="count">0</i></span></p></li>
+          <li><strong>黄（強調ハイライト）</strong><p>削除ではなく、目立たせるための黄色マーカー（注釈）。<span class="chip chip--kiiro"><i class="sq"></i>黄<i class="count">0</i></span></p></li>
+        </ol>
+        <div class="media-2">
+          <figure class="shot mini"><img src="assets/ss-03-before.png" alt="適用前" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-3">適用前（選択中）</figcaption></figure>
+          <figure class="shot mini"><img src="assets/ss-04-after.png" alt="適用後" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-4">適用後（データごと削除）</figcaption></figure>
+        </div>
+        <div class="warn"><b>必ずご確認を：</b>墨消し後は、意図した情報が消え、消し漏れがないかをご自身で確認してください。PDFの構造によっては別途チェックが必要な場合があります。</div>
+      </section>
+
+      <!-- 5 OCR -->
+      <section id="ocr" class="sec">
+        <h2><span class="sec-badge">5</span>スキャンPDF（OCR）</h2>
+        <p>文字情報を持たないスキャンPDFを開くと、OCR（日本語＋英語）の実行確認が出ます。「はい」で認識すると、<strong>検索・単語クリック・なぞり選択</strong>が使えるようになります。処理はすべてPC内で行われます。</p>
+        <ol class="steps">
+          <li><strong>OCRを実行</strong><p>確認ダイアログで「はい」。初回のみ言語モデルをダウンロードします（以後オフライン）。</p></li>
+          <li><strong>ふつうに墨消し</strong><p>認識後は通常のPDFと同じ操作で、画像の中の文字も墨消しできます。</p></li>
+        </ol>
+        <figure class="shot mini"><img src="assets/ss-08-ocr.png" alt="スキャンPDFのOCR墨消し" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-8">OCRでスキャンPDFを墨消し</figcaption></figure>
+      </section>
+
+      <!-- 6 AI -->
+      <section id="ai" class="sec">
+        <h2><span class="sec-badge">6</span>AIに候補を相談する</h2>
+        <p>固有名詞や指示から、AIに墨消し候補を挙げてもらえます。<span class="chip chip--ai">AI連携/固有名詞…</span></p>
+        <ol class="steps">
+          <li><strong>プロンプトを生成・コピー</strong><p>カテゴリや指示を入力すると、ChatGPT / Gemini などに貼り付けるための文面が自動でコピーされます。</p></li>
+          <li><strong>AIに貼り付けて質問</strong><p>お使いのAIに貼り付け、回答（JSON）を受け取ります。</p></li>
+          <li><strong>結果を貼り戻す</strong><p>回答をアプリに貼り戻すと、候補が一覧表示。人の目で取捨選択してから墨消しします。</p></li>
+        </ol>
+        <figure class="shot mini"><img src="assets/ss-09-ai.png" alt="AI連携モーダル" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-9">AIに依頼／結果を貼り戻し</figcaption></figure>
+        <div class="tip"><b>プライバシー：</b>アプリはPDFを外部に送信しません。AIへ渡すのはコピーした内容を<b>あなたが貼り付けたときだけ</b>。しかも渡す本文は「画面に見えている文字だけ」で、隠し文字はAIに読ませません。</div>
+      </section>
+
+      <!-- 7 安全対策 -->
+      <section id="safe" class="sec">
+        <h2><span class="sec-badge">7</span>受け取ったPDFの安全対策</h2>
+        <p>相手から届いたPDFには、画面に見えない「隠し文字」が仕込まれていることがあります。ツールバー3段目の機能で、検出・確認・除去ができます。</p>
+        <ol class="steps">
+          <li><strong>開いた瞬間の警告に気づく</strong><p>隠し文字を含むPDFを開くと、上部に赤い警告バナーが出ます。</p></li>
+          <li><strong>隠し文字を確認・削除</strong><p>透明・白・不可視・半透明の文字を一覧で確認し、中身を見てから削除。</p></li>
+          <li><strong>徹底照合（OCR）で炙り出す</strong><p>「画面に見える文字」と「埋め込まれた文字」をOCRで突き合わせ、食い違いを検出します（時間がかかるため実行前に確認が出ます）。</p></li>
+          <li><strong>提出前クリーニング</strong><p>隠し文字・文書プロパティ・添付ファイル・JavaScript をまとめて除去。</p></li>
+          <li><strong>画像化して保存（最も確実）</strong><p>全ページを画像に焼き付け、隠し情報を原理的に完全除去。相手に渡す最終版に最適です。</p></li>
+        </ol>
+        <div class="media-2">
+          <figure class="shot mini"><img src="assets/ss-13-hidden-warning.png" alt="隠し文字の警告バナー" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-13">開封時の隠し文字警告</figcaption></figure>
+          <figure class="shot mini"><img src="assets/ss-14-hidden-compare.png" alt="徹底照合の対比表示" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-14">徹底照合：画面 vs 埋め込み</figcaption></figure>
+        </div>
+        <figure class="shot mini"><img src="assets/ss-15-clean.png" alt="提出前クリーニング確認" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-15">提出前クリーニング（何を消すか確認してから実行）</figcaption></figure>
+      </section>
+
+      <!-- 8 ページ編集 -->
+      <section id="pages" class="sec">
+        <h2><span class="sec-badge">8</span>ページ編集・仕上げ</h2>
+        <p>墨消し以外の仕上げも1本で。多くはサムネで複数選択してからまとめて実行できます。</p>
+        <ol class="steps">
+          <li><strong>回転・削除・並べ替え</strong><p>サムネをチェックして一括回転／削除。ドラッグで順番を入れ替え。<span class="chip">↺ 左</span><span class="chip">↻ 右</span><span class="chip">🗑 ページ削除</span></p></li>
+          <li><strong>用紙サイズ・閉じ代</strong><p>向きを保ったままA4・B4等に変更／製本用の余白を追加。<span class="chip">用紙サイズ</span><span class="chip">閉じ代</span></p></li>
+          <li><strong>ページ番号・スタンプ</strong><p>通し番号を一括付与／朱印・社外秘などを押印。<span class="chip">№ ページ番号</span><span class="chip chip--stamp"><i class="dot"></i>スタンプ</span></p></li>
+          <li><strong>プロパティ消去</strong><p>作成者などの文書プロパティを削除。<span class="chip">プロパティ消去</span></p></li>
+        </ol>
+        <div class="media-2">
+          <figure class="shot mini"><img src="assets/ss-10-thumbs.png" alt="サムネ一覧で一括操作" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-10">サムネで複数選択→一括操作</figcaption></figure>
+          <figure class="shot mini"><img src="assets/ss-11-stamp.png" alt="赤いスタンプ" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-11">赤いスタンプ</figcaption></figure>
+        </div>
+      </section>
+
+      <!-- 9 保存 -->
+      <section id="save" class="sec">
+        <h2><span class="sec-badge">9</span>保存する</h2>
+        <p>「保存」から書き出します。ファイルサイズを3段階から選べます。</p>
+        <ol class="steps">
+          <li><strong>原本品質（既定）</strong><p>画質を変えずそのまま保存（無改変）。</p></li>
+          <li><strong>標準 / 軽量</strong><p>メール添付などサイズを抑えたいときに選択。</p></li>
+          <li><strong>画像化して保存</strong><p>隠し情報まで完全に除去したい最終版はこちら（→ 第7章）。</p></li>
+        </ol>
+        <figure class="shot mini"><img src="assets/ss-16-save.png" alt="保存サイズの選択" loading="lazy" onerror="this.closest('.shot').classList.add('missing')" /><figcaption data-ss="SS-16">保存サイズの選択（既定＝原本品質）</figcaption></figure>
+        <div class="warn"><b>大切なデータの取り扱い：</b>元ファイルは残し、墨消し版は別名で保存することをおすすめします。</div>
+      </section>
+
+      <!-- Tips -->
+      <section id="tips" class="sec">
+        <h2><span class="sec-badge">★</span>困ったとき・便利なコツ</h2>
+        <ol class="steps">
+          <li><strong>間違えた</strong><p><b>Ctrl+Z</b> で元に戻す、<b>Ctrl+Y</b> でやり直し。すべての操作が対象です。</p></li>
+          <li><strong>細部を確認したい</strong><p><b>Ctrl＋マウスホイール</b>で拡大・縮小できます。</p></li>
+          <li><strong>装飾付きの文字が「同語＋」で拾えない</strong><p>星などの記号付き文字はOCRのブレで拾い切れないことがあります。その場合はなぞり選択／四角で個別に墨消ししてください。</p></li>
+          <li><strong>消し漏れが心配</strong><p>提出前クリーニング＋「画像化して保存」を併用すると安心です。</p></li>
+        </ol>
+        <div class="guide-cta">
+          <a class="btn btn-primary" href="index.html#download">無料でダウンロード</a>
+          <a class="btn btn-ghost" href="index.html#videos">動画で見る</a>
+          <a class="btn btn-ghost" href="index.html#faq">よくあるご質問</a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">■</span><span class="brand-name">究極の墨消し</span></div>
+      <p class="footer-note">PDFの機密情報を“本物の墨消し”で消すデスクトップアプリ。</p>
+    </div>
+    <nav class="footer-links">
+      <a href="EULA.html">利用規約（EULA）</a>
+      <a href="https://www.cosmo-law.jp/privacy.html" target="_blank" rel="noopener">プライバシーポリシー</a>
+      <a href="https://cosmo-law.jp/">お問い合わせ</a>
+    </nav>
+  </div>
+  <div class="container footer-copy">
+    <p>提供：高橋喜一 ／ コスモポリタン法律事務所　<a href="https://cosmo-law.jp/">https://cosmo-law.jp/</a></p>
+    <p>© <span id="year">2026</span> 高橋喜一</p>
+    <p class="footer-note" style="margin-top:10px;font-size:12px;line-height:1.6;">本ページ（/pdfmasker/ 配下）では、利用状況の把握のため Google アナリティクス（Cookie 等を使用）を利用しており、取得した情報は Google に送信されます（個人を特定するものではありません）。詳しくは <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener">Google のポリシー</a>、計測の無効化は <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener">オプトアウト アドオン</a> をご覧ください。</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

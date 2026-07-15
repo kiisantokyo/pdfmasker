@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<!-- Google Analytics 4 (GA4) — /pdfmasker/ 配下のみに設置 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-JLKWNBM327"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-JLKWNBM327');
+</script>
 <title>究極の墨消し｜PDFの機密情報を本当に消すデスクトップ墨消しアプリ</title>
 <link rel="icon" type="image/png" href="assets/favicon.png" />
 <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
@@ -82,7 +90,7 @@
 <section id="videos" class="section">
   <div class="container">
     <h2 class="section-title">動画で見る</h2>
-    <p class="section-lead">基本の使い方から、安全機能・便利機能・AI連携まで、機能ごとに動画でご紹介します。</p>
+    <p class="section-lead">基本の使い方から、安全機能・便利機能・AI連携まで、機能ごとに動画でご紹介します。（各動画 約3〜7分）</p>
     <div class="video-grid">
 
       <!-- 動画①：基本編 -->
@@ -97,7 +105,7 @@
             allowfullscreen></iframe>
         </div>
         <figcaption>
-          <span class="video-badge">① 基本編</span>
+          <span class="video-badge">① 基本編</span><span class="video-time">6:56</span>
           <h3>基本の使い方</h3>
           <p>真の墨消し・選択操作・ページ編集など、まず押さえたい基本機能。</p>
         </figcaption>
@@ -115,7 +123,7 @@
             allowfullscreen></iframe>
         </div>
         <figcaption>
-          <span class="video-badge badge-pro">② 応用編</span>
+          <span class="video-badge badge-pro">② 応用編</span><span class="video-time">3:39</span>
           <h3>隠し文字・プロンプトインジェクション対策</h3>
           <p>受け取ったPDFの隠し文字や透明文字列への対策、AIに安全に読ませる仕組み。</p>
         </figcaption>
@@ -133,7 +141,7 @@
             allowfullscreen></iframe>
         </div>
         <figcaption>
-          <span class="video-badge">③ 便利編</span>
+          <span class="video-badge">③ 便利編</span><span class="video-time">3:13</span>
           <h3>クリップボード連携・ファイル連結</h3>
           <p>画像コピー＆貼り付け、クリップボードからの取り込み、複数ファイルの一括連結など。</p>
         </figcaption>
@@ -151,7 +159,7 @@
             allowfullscreen></iframe>
         </div>
         <figcaption>
-          <span class="video-badge badge-pro">④ AI連携</span>
+          <span class="video-badge badge-pro">④ AI連携</span><span class="video-time">6:17</span>
           <h3>AIアシスト（目玉機能）</h3>
           <p>固有名詞や指示からAIに墨消し候補を相談し、人の目で取捨選択して一括墨消し。</p>
         </figcaption>
@@ -424,14 +432,14 @@
         <span class="chip chip--stamp"><i class="dot"></i>スタンプ</span>
       </div>
       <div class="edit-card">
-        <h3>文字入れ（記入・注記）</h3>
-        <p>クリックした位置に文字を書き込み。周囲の文字サイズに自動追従し、近くの行に自動整列。太字（Ctrl+B）も。フォーム記入や注記に。</p>
-        <span class="chip">✏️ 文字入れ</span>
-      </div>
-      <div class="edit-card">
         <h3>プロパティ消去</h3>
         <p>作成者などの文書プロパティを削除。</p>
         <span class="chip">プロパティ消去</span>
+      </div>
+      <div class="edit-card">
+        <h3>文字入れ（記入・注記）</h3>
+        <p>クリックした位置に文字を書き込み。周囲の文字サイズに自動追従し、近くの行に自動整列。太字（Ctrl+B）も。フォーム記入や注記に。</p>
+        <span class="chip">✏️ 文字入れ</span>
       </div>
       <div class="edit-card">
         <h3>複数ファイルを1つに連結</h3>
@@ -632,6 +640,21 @@
   </div>
 </section>
 
+<!-- ===================== 11. 不具合のご報告 ===================== -->
+<section id="report" class="section">
+  <div class="container narrow">
+    <h2 class="section-title">不具合のご報告</h2>
+    <p>本アプリの<strong>不具合</strong>（正しく動作しない・エラーが表示される・墨消しが意図どおりにならない等）に気づかれた場合は、X（旧Twitter）でご報告いただけます。</p>
+    <p style="margin:1.2em 0;">
+      <a class="btn" href="https://x.com/kiichiben_omote" target="_blank" rel="noopener">X（@kiichiben_omote）で不具合を報告する</a>
+    </p>
+    <p class="footer-note">
+      ※こちらは<strong>不具合のご報告専用</strong>の窓口です。いただいた内容は今後の改善の参考にさせていただきますが、個別の返信・対応をお約束するものではありません。<br>
+      ※使い方のご質問・個別サポート・機能のご要望は受け付けておりません。ご不明な点は、まず<a href="#faq">よくあるご質問</a>をご確認ください。
+    </p>
+  </div>
+</section>
+
 </main>
 
 <!-- ===================== フッター ===================== -->
@@ -644,12 +667,13 @@
     <nav class="footer-links">
       <a href="EULA.html">利用規約（EULA）</a>
       <a href="https://www.cosmo-law.jp/privacy.html" target="_blank" rel="noopener">プライバシーポリシー</a>
-      <a href="https://cosmo-law.jp/">お問い合わせ</a>
+      <a href="#report">不具合のご報告</a>
     </nav>
   </div>
   <div class="container footer-copy">
     <p>提供：高橋喜一 ／ コスモポリタン法律事務所　<a href="https://cosmo-law.jp/">https://cosmo-law.jp/</a></p>
     <p>© <span id="year">2026</span> 高橋喜一</p>
+    <p class="footer-note" style="margin-top:10px;font-size:12px;line-height:1.6;">本ページ（/pdfmasker/ 配下）では、利用状況の把握のため Google アナリティクス（Cookie 等を使用）を利用しており、取得した情報は Google に送信されます（個人を特定するものではありません）。詳しくは <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener">Google のポリシー</a>、計測の無効化は <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener">オプトアウト アドオン</a> をご覧ください。</p>
   </div>
 </footer>
 
