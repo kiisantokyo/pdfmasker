@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ColorChoice } from '../lib/colors'
-import { cssColor } from '../lib/colors'
+import { cssColor, isLightColor } from '../lib/colors'
 
 interface Props {
   /** Button label, e.g. 「墨消し」. */
@@ -12,8 +12,6 @@ interface Props {
   selected: ColorChoice
   onSelect: (c: ColorChoice) => void
   onApply: () => void
-  /** Extra class for the apply button (colour theming). */
-  applyClass?: string
   title?: string
 }
 
@@ -29,11 +27,23 @@ export default function ColorApplyButton({
   selected,
   onSelect,
   onApply,
-  applyClass = '',
   title
 }: Props): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+
+  // The apply button wears the currently selected colour so it's obvious which
+  // colour will be used. Text/border/badge adapt to the fill's lightness so the
+  // label stays legible on both dark (黒) and pale (白・黄) fills.
+  const light = isLightColor(selected.rgb)
+  const applyStyle: React.CSSProperties = {
+    background: cssColor(selected.rgb),
+    color: light ? '#2c2c34' : '#fff',
+    borderColor: light ? '#c7bfe0' : 'rgba(0, 0, 0, 0.35)'
+  }
+  const countStyle: React.CSSProperties = {
+    background: light ? 'rgba(0, 0, 0, 0.14)' : 'rgba(255, 255, 255, 0.22)'
+  }
 
   useEffect(() => {
     if (!open) return
@@ -59,13 +69,16 @@ export default function ColorApplyButton({
         <span className="caret">▾</span>
       </button>
       <button
-        className={'split-apply ' + applyClass}
+        className="split-apply act act-color"
+        style={applyStyle}
         onClick={onApply}
         disabled={disabled || count === 0}
         title={title}
       >
         {label}
-        <span className="act-count">{count}</span>
+        <span className="act-count" style={countStyle}>
+          {count}
+        </span>
       </button>
       {open && (
         <div className="color-menu">

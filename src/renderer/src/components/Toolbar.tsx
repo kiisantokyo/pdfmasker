@@ -110,7 +110,6 @@ export default function Toolbar(props: Props): React.JSX.Element {
           selected={props.redactColor}
           onSelect={props.onRedactColor}
           onApply={props.onRedact}
-          applyClass="act act-redact"
           title="選択した範囲の下にある文字・画像を完全に削除し、選んだ色で覆います（白＝塗らずに削除のみ）"
         />
         <ColorApplyButton
@@ -121,7 +120,6 @@ export default function Toolbar(props: Props): React.JSX.Element {
           selected={props.highlightColor}
           onSelect={props.onHighlightColor}
           onApply={props.onHighlight}
-          applyClass="act act-highlight"
           title="選択した範囲に選んだ色の薄いマーカーを引きます（非破壊）"
         />
         <button

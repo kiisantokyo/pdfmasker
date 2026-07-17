@@ -35,3 +35,10 @@ export function cssColor(rgb?: TextColor): string {
   const to = (v: number): number => Math.round(v * 255)
   return `rgb(${to(rgb.r)}, ${to(rgb.g)}, ${to(rgb.b)})`
 }
+
+/** True when a fill is light enough to need dark text on top (whiteout = light).
+ *  Uses perceived luminance (Rec. 601). */
+export function isLightColor(rgb?: TextColor): boolean {
+  if (!rgb) return true
+  return 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b > 0.6
+}

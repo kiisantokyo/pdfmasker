@@ -43,6 +43,32 @@ interface OcrWord {
 }
 /** Per-page OCR results; null until OCR has been run on a text-less PDF. */
 let ocr: Map<number, OcrWord[]> | null = null
+
+/**
+ * Reject OCR "words" whose bounding box is implausibly large for a text token.
+ * Tesseract occasionally boxes a decorative element (speech bubble, avatar, icon)
+ * as a single word spanning much of the page. Such a box has no text meaning, but
+ * without this guard it flows straight into a redaction rect — and because
+ * {@link ocrSelectionRects} merges vertically-overlapping words, a normal drag that
+ * happens to touch it gets merged into one giant rectangle, wiping the whole image
+ * (a full-page-image PDF then renders blank). The native-text path already guards
+ * this via {@link plausibleQuad}; this is the OCR-side equivalent. Thresholds sit
+ * far above real text tokens (which top out near ~11% of page height / ~4% area on
+ * dense chat screenshots) yet well below anything that would visually blank a page.
+ */
+function plausibleOcrWord(
+  w: OcrWord,
+  pageW: number,
+  pageH: number
+): boolean {
+  const bw = w.x1 - w.x0
+  const bh = w.y1 - w.y0
+  if (bw <= 0 || bh <= 0) return false
+  if (bh > pageH * 0.25) return false
+  if (bw > pageW * 0.9) return false
+  if (bw * bh > pageW * pageH * 0.15) return false
+  return true
+}
 const OCR_DPI = 200
 
 function requireDoc(): mupdf.PDFDocument {
@@ -1325,6 +1351,9 @@ export async function runOcr(
     let total = 0
     for (let i = 0; i < count; i++) {
       const page = d.loadPage(i)
+      const [px0, py0, px1, py1] = page.getBounds()
+      const pageW = px1 - px0
+      const pageH = py1 - py0
       const pix = page.toPixmap(
         mupdf.Matrix.scale(zoom, zoom),
         mupdf.ColorSpace.DeviceRGB,
@@ -1344,13 +1373,17 @@ export async function runOcr(
             for (const w of line.words) {
               const text = w.text?.trim()
               if (!text) continue
-              words.push({
+              const word: OcrWord = {
                 text,
                 x0: w.bbox.x0 / zoom,
                 y0: w.bbox.y0 / zoom,
                 x1: w.bbox.x1 / zoom,
                 y1: w.bbox.y1 / zoom
-              })
+              }
+              // Drop recognition artifacts (a decoration boxed as one giant
+              // "word") so they can't become a whole-image redaction rect.
+              if (!plausibleOcrWord(word, pageW, pageH)) continue
+              words.push(word)
             }
           }
         }

@@ -204,6 +204,12 @@ body {
   background: rgba(255, 255, 255, 0.22);
 }
 
+/* 適用ボタンは選択色をインラインで着色する（.act-redact 等の固定色は使わない）。
+   ホバーは色に依存しない明度フィルタで表現し、どの色でも自然に暗くなる。 */
+.toolbar button.act-color:hover:not(:disabled) {
+  filter: brightness(0.93);
+}
+
 /* 墨消し・マーカーの分割ボタン（色スウォッチ＋▾ / 適用）。 */
 .split-btn {
   position: relative;
