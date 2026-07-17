@@ -43,6 +43,22 @@
     "directories": {
       "output": "release"
     },
+    "files": [
+      "**/*",
+      "!src",
+      "!web",
+      "!docs",
+      "!demo",
+      "!youtube",
+      "!scripts",
+      "!resources",
+      "!CLAUDE.md",
+      "!README.md",
+      "!electron.vite.config.ts",
+      "!pnpm-workspace.yaml",
+      "!tsconfig*.json",
+      "!*.tsbuildinfo"
+    ],
     "extraResources": [
       {
         "from": "build/icon.png",
