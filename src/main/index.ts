@@ -251,7 +251,9 @@ function registerIpc(): void {
     }
     return {
       version: app.getVersion(),
-      sourceUrl: 'https://github.com/kiisantokyo/pdfmasker',
+      // AGPL §6 が求めるソース提供先。バージョンごとに ZIP のファイル名が変わるため、
+      // ZIP を直接指さず配布ページの節を指す（リリースのたびにアプリを直さずに済む）。
+      sourceUrl: 'https://www.cosmo-law.jp/pdfmasker/#source',
       license: await read('LICENSE'),
       notices: await read('THIRD-PARTY-NOTICES.md')
     }

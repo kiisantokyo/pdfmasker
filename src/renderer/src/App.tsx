@@ -2749,7 +2749,7 @@ export default function App(): React.JSX.Element {
                 className="modal-cancel"
                 onClick={() => about && window.open(about.sourceUrl, '_blank')}
               >
-                ソースコード（GitHub）を開く
+                ソースコードの入手先を開く
               </button>
               <span className="about-copyright">
                 © 2026 弁護士法人コスモポリタン法律事務所

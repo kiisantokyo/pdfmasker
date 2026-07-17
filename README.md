@@ -96,7 +96,8 @@ The full license text is in [`LICENSE`](./LICENSE).
 This application incorporates **MuPDF** as its PDF engine, which is licensed
 under the AGPL-3.0. Because of that copyleft, the application as a whole is
 distributed under the AGPL-3.0-or-later, and its **complete corresponding
-source code is available in this repository**.
+source code is available at
+<https://www.cosmo-law.jp/pdfmasker/#source>**.
 
 Third-party open-source components (Electron, React, Tesseract.js, and others)
 and their license notices are listed in
