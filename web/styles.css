@@ -309,7 +309,13 @@ a:hover { text-decoration: underline; }
 
 /* ---------- 開発者 ---------- */
 .dev-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 32px; background: #fff; }
-.dev-id { padding-bottom: 20px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
+.dev-id {
+  display: flex; align-items: center; gap: 20px;
+  padding-bottom: 20px; margin-bottom: 22px; border-bottom: 1px solid var(--line);
+}
+/* 顔写真は名刺程度に留める。主役は製品であって開発者ではない。 */
+.dev-photo { display: block; width: 96px; height: 96px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
+.dev-id-text { min-width: 0; }
 .dev-role { margin: 0; font-size: 13px; color: var(--ink-soft); font-weight: 700; letter-spacing: .04em; }
 .dev-name { margin: 6px 0 8px; font-size: 26px; font-weight: 800; letter-spacing: .02em; }
 .dev-name-en { margin-left: 12px; font-size: 13px; font-weight: 600; color: var(--ink-soft); letter-spacing: .06em; }
@@ -342,4 +348,8 @@ a:hover { text-decoration: underline; }
 @media (max-width: 600px) {
   .compare, .points, .feature-grid, .edit-grid, .assure-grid, .shot-pair, .shot-trio, .hidden-grid, .clip-grid { grid-template-columns: 1fr; }
   .section { padding: 56px 0; }
+  /* 横並びだと写真96px＋余白で本文が160px程度しか残らず、事務所名が3行に
+     折り返して窮屈になるため縦積みにする。 */
+  .dev-card { padding: 22px; }
+  .dev-id { flex-direction: column; align-items: flex-start; gap: 14px; }
 }
