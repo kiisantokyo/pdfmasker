@@ -45,6 +45,7 @@
     },
     "files": [
       "**/*",
+      "!.claude",
       "!src",
       "!web",
       "!docs",
