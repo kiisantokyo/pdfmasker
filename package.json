@@ -58,7 +58,8 @@
       "!electron.vite.config.ts",
       "!pnpm-workspace.yaml",
       "!tsconfig*.json",
-      "!*.tsbuildinfo"
+      "!*.tsbuildinfo",
+      "!.gitleaks*"
     ],
     "extraResources": [
       {
