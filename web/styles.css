@@ -59,11 +59,8 @@ a:hover { text-decoration: underline; }
 .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; color: var(--ink); }
 .brand:hover { text-decoration: none; }
 .brand-mark { color: var(--ink); font-size: 18px; line-height: 1; }
-.brand-text { display: flex; flex-direction: column; line-height: 1.25; }
+.brand-icon { display: block; width: 30px; height: 30px; }
 .brand-name { font-size: 18px; letter-spacing: .02em; }
-/* 誰が作っているかはスクロールせずとも分かるべき情報。ヘッダーは sticky なので常時見える。
-   ここが事務所名（誰が）を担い、ヒーローのピルは理由（なぜ）を担う——役割を分けて重複を避ける。 */
-.brand-by { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); letter-spacing: .02em; }
 .nav-links { display: flex; align-items: center; gap: 22px; }
 .nav-links a { color: var(--ink-soft); font-size: 14px; font-weight: 600; }
 .nav-links a:hover { color: var(--accent); text-decoration: none; }
@@ -98,6 +95,13 @@ a:hover { text-decoration: underline; }
 .hero-title { font-size: clamp(32px, 5vw, 52px); line-height: 1.25; margin: 0 0 20px; font-weight: 900; letter-spacing: .01em; }
 .hero-title .accent { color: var(--danger); }
 .hero-sub { font-size: 17px; color: var(--ink-soft); margin: 0 0 28px; }
+/* 開発の由来。製品説明とは別段落にし、左の罫で「作り手の言葉」であることを示す。 */
+.hero-origin {
+  font-size: 15.5px;
+  margin-top: -12px;
+  padding-left: 14px;
+  border-left: 2px solid var(--line);
+}
 .hero-cta { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
 .trust-badges { list-style: none; display: flex; flex-wrap: wrap; gap: 16px; padding: 0; margin: 0; }
 .trust-badges li { font-size: 13.5px; color: var(--good); font-weight: 700; }
@@ -321,7 +325,4 @@ a:hover { text-decoration: underline; }
 @media (max-width: 600px) {
   .compare, .points, .feature-grid, .edit-grid, .assure-grid, .shot-pair, .shot-trio, .hidden-grid, .clip-grid { grid-template-columns: 1fr; }
   .section { padding: 56px 0; }
-  /* 事務所名がヘッダー幅に収まらず折り返してダウンロードボタンと衝突するため、
-     狭い画面では省く。開発元はヒーローのピルがファーストビュー内で伝える。 */
-  .brand-by { display: none; }
 }
