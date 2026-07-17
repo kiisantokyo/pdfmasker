@@ -307,6 +307,23 @@ a:hover { text-decoration: underline; }
 .btn-store .store-txt small { font-size: 10.5px; font-weight: 600; opacity: .8; letter-spacing: .06em; }
 .price-tag .amount { font-size: 40px; }
 
+/* ---------- 開発者 ---------- */
+.dev-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 32px; background: #fff; }
+.dev-id { padding-bottom: 20px; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
+.dev-role { margin: 0; font-size: 13px; color: var(--ink-soft); font-weight: 700; letter-spacing: .04em; }
+.dev-name { margin: 6px 0 8px; font-size: 26px; font-weight: 800; letter-spacing: .02em; }
+.dev-name-en { margin-left: 12px; font-size: 13px; font-weight: 600; color: var(--ink-soft); letter-spacing: .06em; }
+.dev-bar { margin: 0; font-size: 13.5px; color: var(--ink-soft); }
+.dev-facts { margin: 0; }
+.dev-facts dt {
+  font-weight: 800; font-size: 15px; color: var(--ink);
+  padding-left: 13px; border-left: 3px solid var(--accent);
+}
+.dev-facts dd { margin: 8px 0 22px; padding-left: 16px; font-size: 15px; color: var(--ink-soft); }
+.dev-facts dd:last-child { margin-bottom: 0; }
+.dev-facts b { color: var(--ink); font-weight: 700; }
+.dev-more { margin: 24px 0 0; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-soft); }
+
 /* ---------- Amazonアソシエイト ボタン ---------- */
 .btn-amazon { background: #ff9900; color: #111; font-weight: 800; }
 .btn-amazon:hover { background: #f0a020; color: #111; }
