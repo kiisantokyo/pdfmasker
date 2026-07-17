@@ -2654,15 +2654,15 @@ export default function App(): React.JSX.Element {
                   クリップボードの画像は <b>Ctrl+V</b> で貼り付けて編集できます。
                 </p>
                 <a
-                  className="welcome-affiliate"
-                  href="https://amzn.to/4ww1Pau"
+                  className="welcome-site"
+                  href="https://www.cosmo-law.jp/pdfmasker/"
                   target="_blank"
-                  rel="noreferrer nofollow sponsored"
+                  rel="noreferrer"
                 >
-                  🛒 お買い物はこちら（Amazon.co.jp）
+                  🌐 公式サイトを開く
                 </a>
-                <p className="welcome-affiliate-note">
-                  ※ 上記はAmazonアソシエイトのリンクです。リンク経由でご購入いただくと運営者に紹介料が入り、本アプリの無料提供を支えます（お客様の購入価格は変わりません）。
+                <p className="welcome-site-note">
+                  使い方の動画・よくあるご質問・最新情報を公開しています。本アプリの無料提供は、公式サイトの広告収入に支えられています。
                 </p>
               </div>
 

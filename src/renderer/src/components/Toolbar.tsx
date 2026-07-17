@@ -399,18 +399,6 @@ export default function Toolbar(props: Props): React.JSX.Element {
         >
           墨消し漏れチェック
         </button>
-
-        <span className="spacer" />
-
-        <a
-          className="toolbar-affiliate"
-          href="https://amzn.to/4ww1Pau"
-          target="_blank"
-          rel="noreferrer nofollow sponsored"
-          title="Amazonアソシエイトのリンクです。ご購入いただくと運営者に紹介料が入り、本アプリの無料提供を支えます（購入価格は変わりません）。"
-        >
-          🛒 Amazonでお買い物
-        </a>
       </div>
     </div>
   )

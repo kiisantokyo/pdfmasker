@@ -281,6 +281,10 @@ a:hover { text-decoration: underline; }
 .btn-store .store-txt small { font-size: 10.5px; font-weight: 600; opacity: .8; letter-spacing: .06em; }
 .price-tag .amount { font-size: 40px; }
 
+/* ---------- Amazonアソシエイト ボタン ---------- */
+.btn-amazon { background: #ff9900; color: #111; font-weight: 800; }
+.btn-amazon:hover { background: #f0a020; color: #111; }
+
 /* ---------- レスポンシブ ---------- */
 @media (max-width: 900px) {
   .hero-grid, .narrow-grid, .pricing, .video-grid { grid-template-columns: 1fr; }

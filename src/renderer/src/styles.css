@@ -284,27 +284,6 @@ body {
 .toolbar .spacer {
   flex: 1;
 }
-.toolbar-affiliate {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border-radius: 7px;
-  background: #ff9900; /* Amazon orange */
-  color: #1a1a1a;
-  font-weight: 700;
-  font-size: 12px;
-  text-decoration: none;
-  border: 1px solid #e08800;
-  white-space: nowrap;
-}
-.toolbar-affiliate:hover {
-  background: #ffad33;
-}
-.toolbar-affiliate:active {
-  background: #e88f00;
-}
-
 /* Redaction review panel (未適用の選択一覧) */
 .review-list {
   list-style: none;
@@ -841,25 +820,25 @@ body {
   font-size: 12px;
   color: var(--muted);
 }
-.welcome-affiliate {
+.welcome-site {
   display: inline-block;
   margin: 20px auto 0;
   padding: 11px 24px;
-  background: #ff9900; /* Amazon orange */
-  color: #111;
+  background: transparent;
+  color: var(--accent);
   font-weight: 700;
   font-size: 14px;
   text-decoration: none;
+  border: 1px solid var(--accent);
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
-.welcome-affiliate:hover {
-  background: #f0a020;
+.welcome-site:hover {
+  background: var(--accent-soft);
 }
-.welcome-affiliate:active {
+.welcome-site:active {
   transform: translateY(1px);
 }
-.welcome-affiliate-note {
+.welcome-site-note {
   margin: 10px auto 0;
   max-width: 480px;
   text-align: center;
