@@ -10,5 +10,13 @@ release
 .env.*
 !.env.example
 
+# 社内資料。このリポジトリは AGPL で公開しているため追跡しない。
+# 事業計画・収益シミュレーション・課金基盤の設定手順・収録台本・
+# ベータテスターへの案内（限定共有リンクを含む）が入る。
+docs/
+
+# エージェントのローカル設定（許可リストにローカルパスが入る）
+.claude/
+
 # Redaction output sample (generated artifact)
 demo/redacted.pdf

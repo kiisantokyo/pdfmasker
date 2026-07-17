@@ -1,0 +1,12 @@
+# gitleaks の誤検知を明示的に許可する（fingerprint = commit:path:rule:line）。
+# 常時 failure だと検査が形骸化し、本物の漏洩を見逃すため個別に潰す。
+# ここに足すときは「なぜ秘密ではないのか」を必ず書くこと。
+
+# 難読化用のHMAC定数。試用期間ファイルの改ざん検知にのみ使う値で、漏れても
+# 自分の試用をリセットできるだけ。license-store.ts のコメントにも明記のとおり
+# 秘密ではない（そもそも無料化に伴い試用機能は撤去済み）。
+6e0f8ab50a600300384eba88643d497599d0a9cf:src/main/license-store.ts:generic-api-key:19
+
+# Lemon Squeezy の API 説明に載せた curl の記述例。実在しないダミーの
+# license_key（docs/ は追跡対象外にしたが、履歴には残るため走査に掛かる）。
+95deb93fa94cf5ccb864a450c4a5c1f741e7f670:docs/究極の墨消し_StorexLemonSqueezy_初期設定手順書.html:generic-api-key:235
