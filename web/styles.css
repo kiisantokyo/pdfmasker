@@ -64,6 +64,14 @@ a:hover { text-decoration: underline; }
 .nav-links a { color: var(--ink-soft); font-size: 14px; font-weight: 600; }
 .nav-links a:hover { color: var(--accent); text-decoration: none; }
 .nav-links a.btn { color: #fff; }
+/* ダウンロードより一段控えめな導線。淡いアウトラインのピルで、主張しすぎない。 */
+.nav-links a.nav-support {
+  padding: 5px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-soft);
+}
+.nav-links a.nav-support:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ---------- ヒーロー ---------- */
 .hero { background: linear-gradient(180deg, #f7f6fe 0%, #ffffff 100%); padding: 72px 0 56px; }
@@ -291,10 +299,12 @@ a:hover { text-decoration: underline; }
   .narrow-grid.reverse .shot { order: 0; }
   .points, .feature-grid, .edit-grid, .assure-grid, .shot-trio, .hidden-grid, .clip-grid { grid-template-columns: 1fr 1fr; }
   .shot-lg { transform: none; }
-}
-@media (max-width: 600px) {
+  /* 900px を下回るとリンク群がブランド名に食い込んで各項目が2行に折り返すため、
+     ダウンロードボタンだけ残す（導線はフッターとページ内で確保）。 */
   .nav-links { gap: 12px; }
   .nav-links a:not(.btn) { display: none; }
+}
+@media (max-width: 600px) {
   .compare, .points, .feature-grid, .edit-grid, .assure-grid, .shot-pair, .shot-trio, .hidden-grid, .clip-grid { grid-template-columns: 1fr; }
   .section { padding: 56px 0; }
 }
