@@ -61,20 +61,24 @@ a:hover { text-decoration: underline; }
 .brand-mark { color: var(--ink); font-size: 18px; line-height: 1; }
 .brand-text { display: flex; flex-direction: column; line-height: 1.25; }
 .brand-name { font-size: 18px; letter-spacing: .02em; }
-/* 誰が作っているかはスクロールせずとも分かるべき情報。ヘッダーは sticky なので常時見える。 */
-.brand-by { font-size: 11px; font-weight: 600; color: var(--ink-soft); letter-spacing: .01em; }
+/* 誰が作っているかはスクロールせずとも分かるべき情報。ヘッダーは sticky なので常時見える。
+   ここが事務所名（誰が）を担い、ヒーローのピルは理由（なぜ）を担う——役割を分けて重複を避ける。 */
+.brand-by { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); letter-spacing: .02em; }
 .nav-links { display: flex; align-items: center; gap: 22px; }
 .nav-links a { color: var(--ink-soft); font-size: 14px; font-weight: 600; }
 .nav-links a:hover { color: var(--accent); text-decoration: none; }
 .nav-links a.btn { color: #fff; }
-/* ダウンロードより一段控えめな導線。淡いアウトラインのピルで、主張しすぎない。 */
+/* 応援（Amazon）への導線。淡いアウトラインでは何のボタンか伝わらなかったため、
+   リンク先を連想させるオレンジの実ボタンに。ダウンロードが主役であることは
+   保ちたいので、サイズは btn-sm 相当のまま紫より前には出さない。 */
 .nav-links a.nav-support {
-  padding: 5px 13px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--ink-soft);
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #ff9900;
+  color: #1a1a1a;
+  font-weight: 700;
 }
-.nav-links a.nav-support:hover { border-color: var(--accent); color: var(--accent); }
+.nav-links a.nav-support:hover { background: #f0a020; color: #1a1a1a; text-decoration: none; }
 
 /* ---------- ヒーロー ---------- */
 .hero { background: linear-gradient(180deg, #f7f6fe 0%, #ffffff 100%); padding: 72px 0 56px; }
@@ -84,10 +88,11 @@ a:hover { text-decoration: underline; }
   font-size: 12.5px; font-weight: 700; padding: 5px 13px; border-radius: 999px;
   letter-spacing: .04em;
 }
-/* 開発元のピル。紫のアクセントではなく落ち着いた本文色の輪郭にして、
-   販促の惹句ではなく「誰が作ったか」の事実表示であることを見た目でも分ける。 */
+/* 開発元の裏付けを示すピル。ヘッダーが事務所名（誰が）を担うので、ここは
+   信頼の理由（なぜ）を短く。濃い塗りで隣の淡いピルと対にし、白地＋濃い枠で
+   下のCTAボタンと競合していた見た目を解消する。 */
 .hero-tag-firm {
-  background: #fff; color: var(--ink); border: 1px solid var(--ink-soft);
+  background: var(--ink); color: #fff;
 }
 .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
 .hero-title { font-size: clamp(32px, 5vw, 52px); line-height: 1.25; margin: 0 0 20px; font-weight: 900; letter-spacing: .01em; }
