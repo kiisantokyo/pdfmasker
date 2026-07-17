@@ -1,0 +1,21 @@
+# gitleaks 設定。既定ルールはそのまま使い、誤検知だけを値で名指しして許可する。
+#
+# なぜ .gitleaksignore（fingerprint 方式）を使わないか:
+#   fingerprint は commit:path:rule:line で構成されるため、履歴を書き換えると
+#   SHA が変わって全て無効になり、CI が再び赤くなる（実際に一度そうなった）。
+#   値そのものを許可するこの方式なら、履歴を書き換えても効き続ける。
+#
+# ここに追加するときは「なぜ秘密ではないのか」を必ず書くこと。
+# 常時 failure の検査は誰も見なくなり、本物の漏洩を見逃す。
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "誤検知として確認済みの値"
+regexes = [
+  # 試用期間ファイルの改ざん検知に使う難読化用のHMAC定数。漏れても自分の試用を
+  # リセットできるだけで、他人の資産にも通信にも影響しない。src/main/license-store.ts
+  # のコメントにも「Not a real secret」と明記。無料化に伴い試用機能自体が撤去済み。
+  '''pmsk_v1_3b9f1c7a2e8d40516a7c9f0b4d2e6810''',
+]
