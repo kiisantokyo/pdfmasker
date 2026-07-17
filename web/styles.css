@@ -59,7 +59,10 @@ a:hover { text-decoration: underline; }
 .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 800; color: var(--ink); }
 .brand:hover { text-decoration: none; }
 .brand-mark { color: var(--ink); font-size: 18px; line-height: 1; }
+.brand-text { display: flex; flex-direction: column; line-height: 1.25; }
 .brand-name { font-size: 18px; letter-spacing: .02em; }
+/* 誰が作っているかはスクロールせずとも分かるべき情報。ヘッダーは sticky なので常時見える。 */
+.brand-by { font-size: 11px; font-weight: 600; color: var(--ink-soft); letter-spacing: .01em; }
 .nav-links { display: flex; align-items: center; gap: 22px; }
 .nav-links a { color: var(--ink-soft); font-size: 14px; font-weight: 600; }
 .nav-links a:hover { color: var(--accent); text-decoration: none; }
@@ -75,10 +78,16 @@ a:hover { text-decoration: underline; }
 
 /* ---------- ヒーロー ---------- */
 .hero { background: linear-gradient(180deg, #f7f6fe 0%, #ffffff 100%); padding: 72px 0 56px; }
+.hero-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .hero-tag {
   display: inline-block; background: #eceafb; color: var(--accent-d);
   font-size: 12.5px; font-weight: 700; padding: 5px 13px; border-radius: 999px;
-  margin-bottom: 16px; letter-spacing: .04em;
+  letter-spacing: .04em;
+}
+/* 開発元のピル。紫のアクセントではなく落ち着いた本文色の輪郭にして、
+   販促の惹句ではなく「誰が作ったか」の事実表示であることを見た目でも分ける。 */
+.hero-tag-firm {
+  background: #fff; color: var(--ink); border: 1px solid var(--ink-soft);
 }
 .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
 .hero-title { font-size: clamp(32px, 5vw, 52px); line-height: 1.25; margin: 0 0 20px; font-weight: 900; letter-spacing: .01em; }
@@ -307,4 +316,7 @@ a:hover { text-decoration: underline; }
 @media (max-width: 600px) {
   .compare, .points, .feature-grid, .edit-grid, .assure-grid, .shot-pair, .shot-trio, .hidden-grid, .clip-grid { grid-template-columns: 1fr; }
   .section { padding: 56px 0; }
+  /* 事務所名がヘッダー幅に収まらず折り返してダウンロードボタンと衝突するため、
+     狭い画面では省く。開発元はヒーローのピルがファーストビュー内で伝える。 */
+  .brand-by { display: none; }
 }
